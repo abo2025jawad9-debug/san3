@@ -78,5 +78,21 @@
         "break_even_price": 62739.24,
         "min_sell_price": 62742.46,
         "sell_details": {}
+    },
+    "buy_6020ba9c": {
+        "type": "buy",
+        "status": "معلقة - جاري الانتظار",
+        "date": "2026-06-23",
+        "time": "21:54:28.210607",
+        "buy_time": "2026-06-23T21:54:28.210607",
+        "buy_price": 62614.01,
+        "qty": 0.00031,
+        "sellable_qty": 0.00030969,
+        "buy_amount_usd": 20.0,
+        "buy_fee_usd": 0.0194,
+        "total_cost": 19.4492,
+        "break_even_price": 62739.24,
+        "min_sell_price": 62742.46,
+        "sell_details": {}
     }
 }
