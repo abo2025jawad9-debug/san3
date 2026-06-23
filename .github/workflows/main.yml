@@ -1,0 +1,36 @@
+name: Binance Trading Bot
+
+on:
+  schedule:
+    - cron: '0 */7 * * *' # التشغيل التلقائي كل 7 ساعات تماماً
+  workflow_dispatch: # للسماح بالتشغيل اليدوي في أي وقت
+
+permissions:
+  contents: write # صلاحية هامة جداً للسماح للسكربت برفع التعديلات للمستودع
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        with:
+          persist-credentials: true # الحفاظ على بيانات الاعتماد لتمكين الـ Push من داخل بايثون
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install python-binance requests
+
+      - name: Run Trading Script
+        env:
+          BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
+          BINANCE_API_SECRET: ${{ secrets.BINANCE_API_SECRET }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python bot.py
