@@ -24,5 +24,22 @@
             "sell_date": "2026-06-23",
             "sell_time": "23:46:17.812633"
         }
+    },
+    "buy_d723fbb3": {
+        "type": "buy",
+        "status": "معلقة - جاري الانتظار",
+        "date": "2026-06-23",
+        "time": "23:46:20.353920",
+        "buy_time": "2026-06-23T23:46:20.353920",
+        "buy_price": 69.68,
+        "qty": 0.287,
+        "sellable_qty": 0.286713,
+        "buy_amount_usd": 20.0,
+        "buy_fee_usd": 0.02,
+        "buy_cost": 19.9982,
+        "total_cost": 20.0382,
+        "break_even_price": 69.82,
+        "min_sell_price": 69.82,
+        "sell_details": {}
     }
 }
