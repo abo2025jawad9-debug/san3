@@ -14,5 +14,21 @@
         "break_even_price": 62690.73,
         "min_sell_price": 62693.96,
         "sell_details": {}
+    },
+    "buy_fd57f23e": {
+        "type": "buy",
+        "status": "معلقة - جاري الانتظار",
+        "date": "2026-06-23",
+        "time": "23:01:05.717492",
+        "buy_time": "2026-06-23T23:01:05.717492",
+        "buy_price": 62535.14,
+        "qty": 0.00031,
+        "sellable_qty": 0.00030969,
+        "buy_amount_usd": 20.0,
+        "buy_fee_usd": 0.0194,
+        "total_cost": 19.4247,
+        "break_even_price": 62660.21,
+        "min_sell_price": 62663.44,
+        "sell_details": {}
     }
 }
