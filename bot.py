@@ -52,7 +52,7 @@ def fetch_free_proxies():
         "https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/http.txt",
         "https://raw.githubusercontent.com/clarketm/proxy-list/master/proxy-list-raw.txt",
     ]
-    print("🔍 جاري جلب قائمة البروكسيات...")
+    print("[PROXY] Fetching proxy list...")
     for source in sources:
         try:
             response = requests.get(source, timeout=15)
@@ -67,7 +67,7 @@ def fetch_free_proxies():
         except Exception:
             pass
     proxies = list(dict.fromkeys(proxies))
-    print(f"📊 إجمالي البروكسيات: {len(proxies)}")
+    print(f"[PROXY] Total fetched: {len(proxies)}")
     return proxies
 
 def test_proxy(proxy_url):
@@ -87,7 +87,7 @@ def get_best_proxy():
     if not PROXY_LIST:
         PROXY_LIST = fetch_free_proxies()
 
-    print(f"⚡ فحص {min(100, len(PROXY_LIST))} بروكسي...")
+    print(f"[PROXY] Testing {min(100, len(PROXY_LIST))} proxies...")
     tested = []
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
@@ -102,13 +102,13 @@ def get_best_proxy():
                     PROXY_LIST.remove(proxy)
 
     if not tested:
-        print("❌ لا يوجد بروكسي يعمل! إعادة الجلب...")
+        print("[PROXY] No working proxy! Refetching...")
         PROXY_LIST = []
         return None
 
     tested.sort(key=lambda x: x[1])
     best = tested[0]
-    print(f"🏆 أفضل بروكسي: {best[0]} (سرعة: {best[1]:.2f}ث)")
+    print(f"[PROXY] Best: {best[0]} (speed: {best[1]:.2f}s)")
     return {"http": best[0], "https": best[0]}
 
 def init_client_with_retries():
@@ -116,7 +116,7 @@ def init_client_with_retries():
 
     while True:
         for attempt in range(1, 4):
-            print(f"🔄 محاولة الاتصال #{attempt}/3...")
+            print(f"[INIT] Connection attempt {attempt}/3...")
             proxy = get_best_proxy()
             if proxy is None:
                 time.sleep(3)
@@ -125,19 +125,19 @@ def init_client_with_retries():
             try:
                 client = Client(API_KEY, API_SECRET, testnet=True, requests_params={"proxies": proxy})
                 client.get_account()
-                print(f"✅ اتصال ناجح! البروكسي: {proxy['http']}")
+                print(f"[INIT] Connected! Proxy: {proxy['http']}")
                 return True
             except BinanceAPIException as e:
-                print(f"⚠️ رفض البروكسي: {e}")
+                print(f"[INIT] Proxy rejected: {e}")
                 if proxy['http'] in PROXY_LIST:
                     PROXY_LIST.remove(proxy['http'])
             except Exception as e:
-                print(f"⚠️ خطأ: {e}")
+                print(f"[INIT] Error: {e}")
                 if proxy['http'] in PROXY_LIST:
                     PROXY_LIST.remove(proxy['http'])
             time.sleep(2)
 
-        print("🔄 فشلت 3 محاولات. إعادة جلب بروكسيات جديدة...")
+        print("[INIT] 3 attempts failed. Refetching proxies...")
         PROXY_LIST = []
         time.sleep(5)
 
@@ -185,7 +185,7 @@ def git_commit_and_push():
                 subprocess.run(['git', '--work-tree=' + os.getcwd(), 'push'], check=True)
             return True
         except Exception as e:
-            print(f"⚠️ فشل Git: {e}")
+            print(f"[GIT] Failed: {e}")
             time.sleep(2)
     return False
 
@@ -212,16 +212,15 @@ def calculate_sell_thresholds(buy_price, qty, buy_fee_usd):
 # ================= عمليات السوق =================
 
 def get_current_price():
-    """جلب السعر الحالي + أعلى سعر في آخر دقيقة"""
     try:
         ticker = float(client.get_symbol_ticker(symbol=SYMBOL)['price'])
         klines = client.get_klines(symbol=SYMBOL, interval=Client.KLINE_INTERVAL_1MINUTE, limit=1)
         high = float(klines[0][2])
         current = max(ticker, high)
-        print(f"📊 سعر لحظي: {ticker:.2f} | أعلى دقيقة: {high:.2f} | المستخدم: {current:.2f}")
+        print("[PRICE] Ticker: %.2f | High(1m): %.2f | Using: %.2f" % (ticker, high, current))
         return current
     except Exception as e:
-        print(f"⚠️ فشل جلب السعر: {e}")
+        print("[PRICE] Failed: %s" % e)
         return None
 
 def execute_buy():
@@ -262,10 +261,10 @@ def execute_buy():
             return order, total_fee_usd, total_qty, actual_price, total_cost, sellable_qty
 
         except Exception as e:
-            print(f"⚠️ فشل الشراء (محاولة {attempt}): {e}")
+            print("[BUY] Attempt %d failed: %s" % (attempt, e))
             time.sleep(2)
 
-    send_telegram_message(f"❌ <b>فشل الشراء بعد 3 محاولات!</b>\n{e}")
+    send_telegram_message("[ERROR] Buy failed after 3 attempts!")
     return None, 0, 0, 0, 0, 0
 
 def execute_sell(qty):
@@ -277,7 +276,7 @@ def execute_sell(qty):
             qty = round(qty - (qty % step), prec)
 
             if qty <= 0:
-                print("⚠️ كمية البيع صفر بعد التقريب")
+                print("[SELL] Qty is zero after rounding")
                 return None, 0, 0, 0
 
             order = client.order_market_sell(symbol=SYMBOL, quantity=qty)
@@ -307,7 +306,7 @@ def execute_sell(qty):
             return order, total_received, total_fee, actual_price
 
         except Exception as e:
-            print(f"⚠️ فشل البيع (محاولة {attempt}): {e}")
+            print("[SELL] Attempt %d failed: %s" % (attempt, e))
             time.sleep(2)
 
     return None, 0, 0, 0
@@ -318,7 +317,6 @@ def count_open_positions(history):
     return sum(1 for op in history.values() if isinstance(op, dict) and op.get('status') == "معلقة - جاري الانتظار")
 
 def get_lowest_buy_price(history):
-    """أقل سعر شراء بين جميع العمليات المفتوحة"""
     open_prices = [pos['buy_price'] for pos in history.values() 
                    if isinstance(pos, dict) and pos.get('status') == "معلقة - جاري الانتظار"]
     return min(open_prices) if open_prices else None
@@ -327,7 +325,7 @@ def create_buy_operation():
     order, fee, qty, actual_price, total_cost, sellable_qty = execute_buy()
 
     if order is None or qty <= 0:
-        print("❌ فشل إنشاء عملية شراء")
+        print("[BUY] Failed to create buy operation")
         return None
 
     calc = calculate_sell_thresholds(actual_price, qty, fee)
@@ -357,18 +355,18 @@ def create_buy_operation():
     git_commit_and_push()
 
     msg = (
-        f"✅ <b>عملية شراء جديدة!</b>\n\n"
-        f"🆔 المعرف: <code>{op_id}</code>\n"
-        f"💰 سعر الشراء: <code>{actual_price:.2f}</code>\n"
-        f"📊 الكمية: <code>{qty:.6f} BTC</code>\n"
-        f"📉 الكمية الصافية: <code>{sellable_qty:.6f} BTC</code>\n"
-        f"💵 التكلفة: <code>{calc['total_cost']:.2f}</code>\n"
-        f"⚖️ التعادل: <code>{calc['break_even_price']:.2f}</code>\n"
-        f"🎯 البيع عند: <code>{calc['min_sell_price']:.2f}</code>"
+        "[BUY] New operation created!\n"
+        "ID: %s\n"
+        "Price: %.2f\n"
+        "Qty: %.6f BTC\n"
+        "Sellable: %.6f BTC\n"
+        "Cost: %.2f\n"
+        "Break-even: %.2f\n"
+        "Target: %.2f" % (op_id, actual_price, qty, sellable_qty, calc['total_cost'], calc['break_even_price'], calc['min_sell_price'])
     )
     send_telegram_message(msg)
 
-    print(f"✅ تم إنشاء عملية شراء: {op_id} @ {actual_price:.2f}")
+    print("[BUY] Created: %s @ %.2f" % (op_id, actual_price))
     return op_id
 
 def check_and_sell_all(history, current_price):
@@ -385,11 +383,12 @@ def check_and_sell_all(history, current_price):
         min_sell = pos['min_sell_price']
         total_cost = pos['total_cost']
         buy_fee = pos['buy_fee_usd']
+        diff = current_price - min_sell
 
-        print(f"🔍 [{op_id}] شراء@{buy_price:.2f} | حالي@{current_price:.2f} | هدف@{min_sell:.2f} | فرق:{current_price-min_sell:.2f}")
+        print("[CHECK] %s | Buy@%.2f | Now@%.2f | Target@%.2f | Diff:%.2f" % (op_id, buy_price, current_price, min_sell, diff))
 
         if current_price >= min_sell:
-            print(f"🎯 [{op_id}] تحقق شرط البيع! جاري البيع...")
+            print("[SELL] %s target reached! Executing sell..." % op_id)
 
             order, received, sell_fee, sell_price = execute_sell(qty)
 
@@ -410,26 +409,25 @@ def check_and_sell_all(history, current_price):
                 }
 
                 msg = (
-                    f"✅ <b>تم البيع بربح!</b>\n\n"
-                    f"🆔 العملية: <code>{op_id}</code>\n"
-                    f"💰 شراء: <code>{buy_price:.2f}</code>\n"
-                    f"💵 بيع: <code>{sell_price:.2f}</code>\n"
-                    f"📊 كمية: <code>{qty:.6f} BTC</code>\n"
-                    f"💸 تكلفة: <code>{total_cost:.2f}</code>\n"
-                    f"💵 عائد: <code>{received:.2f}</code>\n"
-                    f"📉 رسوم: <code>{(buy_fee + sell_fee):.4f}</code>\n"
-                    f"💚 <b>ربح: {actual_profit:.4f} USDT</b>\n"
-                    f"📈 نسبة: <code>{(actual_profit/total_cost)*100:.2f}%</code>"
+                    "[SELL] Sold with profit!\n"
+                    "ID: %s\n"
+                    "Buy: %.2f | Sell: %.2f\n"
+                    "Qty: %.6f BTC\n"
+                    "Cost: %.2f | Received: %.2f\n"
+                    "Fees: %.4f\n"
+                    "Profit: %.4f USDT (%.2f%%)" % (
+                        op_id, buy_price, sell_price, qty, total_cost, received, 
+                        buy_fee + sell_fee, actual_profit, (actual_profit/total_cost)*100
+                    )
                 )
                 send_telegram_message(msg)
-                print(f"✅ تم بيع {op_id} بربح {actual_profit:.4f} USDT")
+                print("[SELL] Sold %s profit=%.4f USDT" % (op_id, actual_profit))
             else:
-                print(f"❌ فشل بيع {op_id}")
+                print("[SELL] Failed to sell %s" % op_id)
 
     return sold_any, history
 
 def check_rebuy(history, current_price):
-    """فحص إعادة الشراء بعد 30 دقيقة - بسعر أقل من أقل شراء"""
     rebuy_needed = False
     lowest_price = get_lowest_buy_price(history)
 
@@ -449,11 +447,11 @@ def check_rebuy(history, current_price):
 
         if elapsed >= timedelta(minutes=REBUY_WAIT_MINUTES):
             if current_price < lowest_price:
-                print(f"⏰ [{op_id}] مر {REBUY_WAIT_MINUTES} دقيقة | السعر {current_price:.2f} < أقل شراء {lowest_price:.2f} → إعادة شراء!")
+                print("[REBUY] %s waited %d min | price %.2f < lowest %.2f -> REBUY!" % (op_id, REBUY_WAIT_MINUTES, current_price, lowest_price))
                 rebuy_needed = True
                 break
             else:
-                print(f"⏰ [{op_id}] مر {REBUY_WAIT_MINUTES} دقيقة | السعر {current_price:.2f} >= {lowest_price:.2f} → انتظار...")
+                print("[REBUY] %s waited %d min | price %.2f >= lowest %.2f -> wait..." % (op_id, REBUY_WAIT_MINUTES, current_price, lowest_price))
 
     return rebuy_needed
 
@@ -461,31 +459,35 @@ def check_rebuy(history, current_price):
 
 def main():
     if not API_KEY or not API_SECRET:
-        print("❌ لا توجد مفاتيح API!")
+        print("[ERROR] No API keys!")
         return
 
-    print("🚀 بدء البوت الجديد على Testnet...")
+    print("[START] Bot starting on Testnet...")
     init_client_with_retries()
 
     start_time = time.time()
     end_time = start_time + (RUN_DURATION_HOURS * 3600)
 
-    print(f"⏱ مدة التشغيل: {RUN_DURATION_HOURS} ساعات")
-    print(f"🕐 البدء: {datetime.utcnow().strftime('%H:%M:%S')}")
-    print(f"🕐 الانتهاء: {datetime.utcfromtimestamp(end_time).strftime('%H:%M:%S')}")
+    print("[START] Duration: %d hours" % RUN_DURATION_HOURS)
+    print("[START] Start: %s" % datetime.utcnow().strftime('%H:%M:%S'))
+    print("[START] End: %s" % datetime.utcfromtimestamp(end_time).strftime('%H:%M:%S'))
 
-    # شراء أولي مباشر
-    print("💰 جاري الشراء الأولي...")
+    print("[START] First buy...")
     create_buy_operation()
 
     send_telegram_message(
-        f"🚀 <b>البوت الجديد يعمل!</b>\n"
-        f"⏱ مدة التشغيل: {RUN_DURATION_HOURS} ساعات\n"
-        f"🕐 البدء: {datetime.utcnow().strftime('%H:%M:%S')} UTC\n"
-        f"🕐 الانتهاء: {datetime.utcfromtimestamp(end_time).strftime('%H:%M:%S')} UTC\n"
-        f"⏱ مراقبة كل {SLEEP_SECONDS} ثانية\n"
-        f"📊 الحد الأقصى: {MAX_OPEN_POSITIONS} عمليات\n"
-        f"⏰ إعادة شراء بعد {REBUY_WAIT_MINUTES} دقيقة (بسعر أقل من أقل شراء)"
+        "[START] Bot running!\n"
+        "Duration: %d hours\n"
+        "Start: %s UTC\n"
+        "End: %s UTC\n"
+        "Sleep: %d sec\n"
+        "Max positions: %d\n"
+        "Rebuy after: %d min (lower than lowest buy)" % (
+            RUN_DURATION_HOURS,
+            datetime.utcnow().strftime('%H:%M:%S'),
+            datetime.utcfromtimestamp(end_time).strftime('%H:%M:%S'),
+            SLEEP_SECONDS, MAX_OPEN_POSITIONS, REBUY_WAIT_MINUTES
+        )
     )
 
     while time.time() < end_time:
@@ -498,48 +500,47 @@ def main():
             current_price = get_current_price()
 
             if current_price is None:
-                print("⏳ فشل جلب السعر، إعادة المحاولة...")
+                print("[LOOP] Price fetch failed, retrying...")
                 time.sleep(5)
                 continue
 
-            print(f"⏱ متبقي: {remaining_min:.0f} دقيقة")
+            print("[LOOP] Remaining: %.0f min" % remaining_min)
 
-            # 1. فحص البيع لجميع العمليات المفتوحة
+            # 1. Check sell for all open positions
             sold, history = check_and_sell_all(history, current_price)
             if sold:
                 save_history(history)
                 git_commit_and_push()
                 history = load_history()
 
-            # 2. عدد العمليات المفتوحة
+            # 2. Count open positions
             open_count = count_open_positions(history)
             lowest = get_lowest_buy_price(history)
-            print(f"📊 مفتوحة: {open_count}/{MAX_OPEN_POSITIONS} | أقل شراء: {lowest:.2f if lowest else '---'}")
+            print("[LOOP] Open: %d/%d | Lowest buy: %.2f" % (open_count, MAX_OPEN_POSITIONS, lowest if lowest else 0))
 
-            # 3. إذا باع وصار فيه مكان → شراء جديدة
+            # 3. If sold and has space -> new buy
             if open_count < MAX_OPEN_POSITIONS:
                 needs_rebuy = check_rebuy(history, current_price)
 
                 if needs_rebuy or open_count == 0:
-                    print(f"💰 فتح عملية شراء جديدة...")
+                    print("[LOOP] Opening new buy position...")
                     create_buy_operation()
-
             else:
-                print(f"⏳ الحد الأقصى ({MAX_OPEN_POSITIONS}) ممتلئ. انتظار بيع...")
+                print("[LOOP] Max positions (%d) reached. Waiting for sell..." % MAX_OPEN_POSITIONS)
 
         except Exception as e:
             error_str = str(e)
-            print(f"⚠️ خطأ: {error_str[:200]}")
+            print("[ERROR] %s" % error_str[:200])
             if any(k in error_str.lower() for k in ["connection", "proxy", "read", "timeout", "api"]):
-                print("🔄 إعادة تهيئة الاتصال...")
+                print("[ERROR] Connection error, reinitializing...")
                 init_client_with_retries()
 
         elapsed = time.time() - loop_start
         sleep_time = max(0, SLEEP_SECONDS - elapsed)
         time.sleep(sleep_time)
 
-    print("🛑 انتهت الـ 6 ساعات!")
-    send_telegram_message("🛑 <b>انتهت دورة التشغيل (6 ساعات)!</b>")
+    print("[END] 6 hours completed!")
+    send_telegram_message("[END] 6 hour cycle completed!")
 
 if __name__ == "__main__":
     main()
