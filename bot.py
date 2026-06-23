@@ -44,7 +44,6 @@ client = None
 # ================= بروكسيات =================
 
 def fetch_free_proxies():
-    """جلب 100+ بروكسي مجاني"""
     proxies = []
     sources = [
         "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=5000&country=all&ssl=all&anonymity=elite",
@@ -72,7 +71,6 @@ def fetch_free_proxies():
     return proxies
 
 def test_proxy(proxy_url):
-    """اختبار سرعة البروكسي"""
     try:
         proxies = {"http": proxy_url, "https": proxy_url}
         start = time.time()
@@ -85,7 +83,6 @@ def test_proxy(proxy_url):
         return None
 
 def get_best_proxy():
-    """اختيار أقوى بروكسي من 100 بروكسي"""
     global PROXY_LIST
     if not PROXY_LIST:
         PROXY_LIST = fetch_free_proxies()
@@ -115,7 +112,6 @@ def get_best_proxy():
     return {"http": best[0], "https": best[0]}
 
 def init_client_with_retries():
-    """تهيئة العميل مع 3 محاولات ثم إعادة جلب بروكسيات"""
     global client, PROXY_LIST
 
     while True:
@@ -216,15 +212,19 @@ def calculate_sell_thresholds(buy_price, qty, buy_fee_usd):
 # ================= عمليات السوق =================
 
 def get_current_price():
-    """جلب السعر الحالي"""
+    """جلب السعر الحالي + أعلى سعر في آخر دقيقة"""
     try:
-        return float(client.get_symbol_ticker(symbol=SYMBOL)['price'])
+        ticker = float(client.get_symbol_ticker(symbol=SYMBOL)['price'])
+        klines = client.get_klines(symbol=SYMBOL, interval=Client.KLINE_INTERVAL_1MINUTE, limit=1)
+        high = float(klines[0][2])
+        current = max(ticker, high)
+        print(f"📊 سعر لحظي: {ticker:.2f} | أعلى دقيقة: {high:.2f} | المستخدم: {current:.2f}")
+        return current
     except Exception as e:
         print(f"⚠️ فشل جلب السعر: {e}")
         return None
 
 def execute_buy():
-    """تنفيذ شراء بقيمة 20 USDT"""
     for attempt in range(1, 4):
         try:
             current_price = float(client.get_symbol_ticker(symbol=SYMBOL)['price'])
@@ -269,7 +269,6 @@ def execute_buy():
     return None, 0, 0, 0, 0, 0
 
 def execute_sell(qty):
-    """تنفيذ بيع"""
     for attempt in range(1, 4):
         try:
             info = client.get_symbol_info(SYMBOL)
@@ -316,11 +315,15 @@ def execute_sell(qty):
 # ================= منطق التداول الرئيسي =================
 
 def count_open_positions(history):
-    """عدد العمليات المفتوحة (معلقة)"""
     return sum(1 for op in history.values() if isinstance(op, dict) and op.get('status') == "معلقة - جاري الانتظار")
 
+def get_lowest_buy_price(history):
+    """أقل سعر شراء بين جميع العمليات المفتوحة"""
+    open_prices = [pos['buy_price'] for pos in history.values() 
+                   if isinstance(pos, dict) and pos.get('status') == "معلقة - جاري الانتظار"]
+    return min(open_prices) if open_prices else None
+
 def create_buy_operation():
-    """إنشاء عملية شراء جديدة وحفظها"""
     order, fee, qty, actual_price, total_cost, sellable_qty = execute_buy()
 
     if order is None or qty <= 0:
@@ -369,7 +372,6 @@ def create_buy_operation():
     return op_id
 
 def check_and_sell_all(history, current_price):
-    """فحص جميع العمليات المفتوحة والبيع إذا تحقق الشرط"""
     sold_any = False
 
     for op_id in list(history.keys()):
@@ -384,7 +386,7 @@ def check_and_sell_all(history, current_price):
         total_cost = pos['total_cost']
         buy_fee = pos['buy_fee_usd']
 
-        print(f"🔍 [{op_id}] شراء@{buy_price:.2f} | حالي@{current_price:.2f} | هدف@{min_sell:.2f}")
+        print(f"🔍 [{op_id}] شراء@{buy_price:.2f} | حالي@{current_price:.2f} | هدف@{min_sell:.2f} | فرق:{current_price-min_sell:.2f}")
 
         if current_price >= min_sell:
             print(f"🎯 [{op_id}] تحقق شرط البيع! جاري البيع...")
@@ -427,8 +429,12 @@ def check_and_sell_all(history, current_price):
     return sold_any, history
 
 def check_rebuy(history, current_price):
-    """فحص إعادة الشراء بعد 30 دقيقة"""
+    """فحص إعادة الشراء بعد 30 دقيقة - بسعر أقل من أقل شراء"""
     rebuy_needed = False
+    lowest_price = get_lowest_buy_price(history)
+
+    if lowest_price is None:
+        return False
 
     for op_id, pos in history.items():
         if not isinstance(pos, dict) or pos.get('status') != "معلقة - جاري الانتظار":
@@ -442,14 +448,12 @@ def check_rebuy(history, current_price):
         elapsed = datetime.utcnow() - buy_time
 
         if elapsed >= timedelta(minutes=REBUY_WAIT_MINUTES):
-            buy_price = pos['buy_price']
-
-            if current_price < buy_price:
-                print(f"⏰ [{op_id}] مر {REBUY_WAIT_MINUTES} دقيقة والسعر أقل! إعادة شراء...")
+            if current_price < lowest_price:
+                print(f"⏰ [{op_id}] مر {REBUY_WAIT_MINUTES} دقيقة | السعر {current_price:.2f} < أقل شراء {lowest_price:.2f} → إعادة شراء!")
                 rebuy_needed = True
                 break
             else:
-                print(f"⏰ [{op_id}] مر {REBUY_WAIT_MINUTES} دقيقة لكن السعر أعلى من الشراء، انتظار...")
+                print(f"⏰ [{op_id}] مر {REBUY_WAIT_MINUTES} دقيقة | السعر {current_price:.2f} >= {lowest_price:.2f} → انتظار...")
 
     return rebuy_needed
 
@@ -463,7 +467,6 @@ def main():
     print("🚀 بدء البوت الجديد على Testnet...")
     init_client_with_retries()
 
-    # حساب وقت الانتهاء (6 ساعات)
     start_time = time.time()
     end_time = start_time + (RUN_DURATION_HOURS * 3600)
 
@@ -482,7 +485,7 @@ def main():
         f"🕐 الانتهاء: {datetime.utcfromtimestamp(end_time).strftime('%H:%M:%S')} UTC\n"
         f"⏱ مراقبة كل {SLEEP_SECONDS} ثانية\n"
         f"📊 الحد الأقصى: {MAX_OPEN_POSITIONS} عمليات\n"
-        f"⏰ إعادة شراء بعد {REBUY_WAIT_MINUTES} دقيقة"
+        f"⏰ إعادة شراء بعد {REBUY_WAIT_MINUTES} دقيقة (بسعر أقل من أقل شراء)"
     )
 
     while time.time() < end_time:
@@ -499,7 +502,7 @@ def main():
                 time.sleep(5)
                 continue
 
-            print(f"📊 السعر: {current_price:.2f} | متبقي: {remaining_min:.0f} دقيقة")
+            print(f"⏱ متبقي: {remaining_min:.0f} دقيقة")
 
             # 1. فحص البيع لجميع العمليات المفتوحة
             sold, history = check_and_sell_all(history, current_price)
@@ -510,7 +513,8 @@ def main():
 
             # 2. عدد العمليات المفتوحة
             open_count = count_open_positions(history)
-            print(f"📊 عمليات مفتوحة: {open_count}/{MAX_OPEN_POSITIONS}")
+            lowest = get_lowest_buy_price(history)
+            print(f"📊 مفتوحة: {open_count}/{MAX_OPEN_POSITIONS} | أقل شراء: {lowest:.2f if lowest else '---'}")
 
             # 3. إذا باع وصار فيه مكان → شراء جديدة
             if open_count < MAX_OPEN_POSITIONS:
