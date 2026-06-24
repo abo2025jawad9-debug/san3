@@ -68,7 +68,7 @@ def fetch_free_proxies():
         except Exception:
             pass
     proxies = list(dict.fromkeys(proxies))
-    print("[PROXY] إِجْمَالِيُّ مَا تَمَّ جَلْبُهُ: %d" % len(proxies))
+    print("[PROXY] إِجْمَالِيُّ مَا تَمَّ جَلْبُهُ: %d" % len(proxies))
     return proxies
 
 def test_proxy(proxy_url):
@@ -109,7 +109,7 @@ def get_best_proxy():
 
     tested.sort(key=lambda x: x[1])
     best = tested[0]
-    print("[PROXY] الأَفْضَلُ: %s (السُّرْعَةُ: %.2fs)" % (best[0], best[1]))
+    print("[PROXY] الأَفْضَلُ: %s (السُّرْعَةُ: %.2fs)" % (best[0], best[1]))
     return {"http": best[0], "https": best[0]}
 
 def init_client_with_retries():
@@ -117,7 +117,7 @@ def init_client_with_retries():
 
     while True:
         for attempt in range(1, 4):
-            print("[INIT] مُحَاوَلَةُ الاِتِّصَالِ %d/3..." % attempt)
+            print("[INIT] مُحَاوَلَةُ الاِتِّصَالِ %d/3..." % attempt)
             proxy = get_best_proxy()
             if proxy is None:
                 time.sleep(3)
@@ -126,10 +126,10 @@ def init_client_with_retries():
             try:
                 client = Client(API_KEY, API_SECRET, testnet=True, requests_params={"proxies": proxy})
                 client.get_account()
-                print("[INIT] تَمَّ الاِتِّصَالُ! البُرُوكْسِي: %s" % proxy['http'])
+                print("[INIT] تَمَّ الاِتِّصَالُ! البُرُوكْسِي: %s" % proxy['http'])
                 return True
             except BinanceAPIException as e:
-                print("[INIT] تَمَّ رَفْضُ البُرُوكْسِي: %s" % e)
+                print("[INIT] تَمَّ رَفْضُ البُرُوكْسِي: %s" % e)
                 if proxy['http'] in PROXY_LIST:
                     PROXY_LIST.remove(proxy['http'])
             except Exception as e:
@@ -182,11 +182,11 @@ def git_commit_and_push():
             subprocess.run(['git', '--work-tree=' + os.getcwd(), 'add', JSON_FILE], check=True)
             status = subprocess.run(['git', '--work-tree=' + os.getcwd(), 'diff', '--staged', '--quiet'])
             if status.returncode != 0:
-                subprocess.run(['git', '--work-tree=' + os.getcwd(), 'commit', '-m', 'تَحْدِيثُ عَمَلِيَّاتِ التَّدَاوُلِ'], check=True)
+                subprocess.run(['git', '--work-tree=' + os.getcwd(), 'commit', '-m', 'تَحْدِيثُ عَمَلِيَّاتِ التَّدَاوُلِ'], check=True)
                 subprocess.run(['git', '--work-tree=' + os.getcwd(), 'push'], check=True)
             return True
         except Exception as e:
-            print("[GIT] فَشِلَ الرَّفْعُ: %s" % e)
+            print("[GIT] فَشِلَ الرَّفْعُ: %s" % e)
             time.sleep(2)
     return False
 
@@ -216,10 +216,10 @@ def calculate_sell_thresholds(buy_price, qty, buy_fee_usd):
 def get_current_price():
     try:
         ticker = float(client.get_symbol_ticker(symbol=SYMBOL)['price'])
-        print("[PRICE] السِّعْرُ الحَالِيُّ: %.2f" % ticker)
+        print("[PRICE] السِّعْرُ الحَالِيُّ: %.2f" % ticker)
         return ticker
     except Exception as e:
-        print("[PRICE] فَشَلٌ فِي جَلْبِ السِّعْرِ: %s" % e)
+        print("[PRICE] فَشَلٌ فِي جَلْبِ السِّعْرِ: %s" % e)
         return None
 
 def execute_buy():
@@ -275,7 +275,7 @@ def execute_sell(qty):
             qty = round(qty - (qty % step), prec)
 
             if qty <= 0:
-                print("[SELL] الكَمِّيَّةُ صِفْرٌ بَعْدَ التَّقْرِيبِ")
+                print("[SELL] الكَمِّيَّةُ صِفْرٌ بَعْدَ التَّقْرِيبِ")
                 return None, 0, 0, 0
 
             order = client.order_market_sell(symbol=SYMBOL, quantity=qty)
@@ -333,11 +333,35 @@ def get_last_buy_time(history):
     times = [datetime.fromisoformat(op['buy_time']) for op in open_ops.values() if op.get('buy_time')]
     return max(times) if times else None
 
+# دوال جديدة للتحقق من شروط البيع المضافة
+def get_last_sell_time(history):
+    sell_times = []
+    for op in history.values():
+        if isinstance(op, dict) and op.get('status') == "تم البيع" and 'sell_details' in op:
+            sd = op['sell_details']
+            if 'sell_date' in sd and 'sell_time' in sd:
+                try:
+                    dt_str = f"{sd['sell_date']}T{sd['sell_time']}"
+                    sell_times.append(datetime.fromisoformat(dt_str))
+                except:
+                    pass
+    return max(sell_times) if sell_times else None
+
+def get_absolute_last_buy_price(history):
+    times = []
+    for op in history.values():
+        if isinstance(op, dict) and 'buy_time' in op and 'buy_price' in op:
+            times.append((datetime.fromisoformat(op['buy_time']), op['buy_price']))
+    if not times:
+        return None
+    times.sort(key=lambda x: x[0])
+    return times[-1][1]
+
 def create_buy_operation():
     order, fee, qty, actual_price, total_cost, sellable_qty = execute_buy()
 
     if order is None or qty <= 0:
-        print("[BUY] فَشَلَ إِنْشَاءُ عَمَلِيَّةِ الشِّرَاءِ")
+        print("[BUY] فَشَلَ إِنْشَاءُ عَمَلِيَّةِ الشِّرَاءِ")
         return None
 
     calc = calculate_sell_thresholds(actual_price, qty, fee)
@@ -368,7 +392,7 @@ def create_buy_operation():
     git_commit_and_push()
 
     msg = (
-        "✅ <b>تَمَّ الشِّرَاءُ!</b>\n"
+        "✅ <b>تَمَّ الشِّرَاءُ!</b>\n"
         f"المعرف: {op_id}\n"
         f"السعر: {actual_price:.2f}\n"
         f"سعر التعادل: {calc['break_even_price']:.2f}\n"
@@ -376,17 +400,17 @@ def create_buy_operation():
     )
     send_telegram_message(msg)
 
-    print("[BUY] تَمَّ الإِنْشَاءُ: %s @ %.2f" % (op_id, actual_price))
+    print("[BUY] تَمَّ الإِنْشَاءُ: %s @ %.2f" % (op_id, actual_price))
     return op_id
 
 def try_sell_all(history, current_price):
     open_positions = get_open_positions(history)
 
     if not open_positions:
-        print("[SELL] لَا تُوجَدُ عَمَلِيَّاتٌ مَفْتُوحَةٌ لِلْبَيْعِ")
+        print("[SELL] لَا تُوجَدُ عَمَلِيَّاتٌ مَفْتُوحَةٌ لِلْبَيْعِ")
         return False, history
 
-    print("[SELL] جَارِي فَحْصُ %d عَمَلِيَّاتٍ مَفْتُوحَةٍ..." % len(open_positions))
+    print("[SELL] جَارِي فَحْصُ %d عَمَلِيَّاتٍ مَفْتُوحَةٍ..." % len(open_positions))
     sold_any = False
 
     for op_id, pos in open_positions.items():
@@ -396,11 +420,11 @@ def try_sell_all(history, current_price):
         buy_cost = pos['buy_cost']
         buy_fee = pos['buy_fee_usd']
 
-        print("[SELL_CHECK] %s | شِرَاء@%.2f | الحَالِيُّ@%.2f | الهَدَفُ@%.2f" % 
+        print("[SELL_CHECK] %s | شِرَاء@%.2f | الحَالِيُّ@%.2f | الهَدَفُ@%.2f" % 
               (op_id, buy_price, current_price, min_sell))
 
         if current_price >= min_sell:
-            print("[SELL] %s تَمَّ بُلُوغُ الهَدَفِ! جَارِي البَيْعُ..." % op_id)
+            print("[SELL] %s تَمَّ بُلُوغُ الهَدَفِ! جَارِي البَيْعُ..." % op_id)
 
             order, received, sell_fee, sell_price = execute_sell(qty)
 
@@ -422,15 +446,15 @@ def try_sell_all(history, current_price):
                 }
 
                 msg = (
-                    "💰 <b>تَمَّ البَيْعُ بِنَجَاحٍ!</b>\n"
+                    "💰 <b>تَمَّ البَيْعُ بِنَجَاحٍ!</b>\n"
                     f"المعرف: {op_id}\n"
                     f"الشراء: {buy_price:.2f} | البيع: {sell_price:.2f}\n"
                     f"الربح الصافي الفعلي: {actual_profit:.4f} USDT"
                 )
                 send_telegram_message(msg)
-                print("[SELL] تَمَّ البَيْعُ %s بِرِبْح=%.4f" % (op_id, actual_profit))
+                print("[SELL] تَمَّ البَيْعُ %s بِرِبْح=%.4f" % (op_id, actual_profit))
             else:
-                print("[SELL] فَشَلَتْ عَمَلِيَّةُ بَيْعِ %s" % op_id)
+                print("[SELL] فَشَلَتْ عَمَلِيَّةُ بَيْعِ %s" % op_id)
         else:
             print("[SELL_CHECK] %s لَمْ يَحِنِ الوَقْتُ بَعْدُ" % op_id)
 
@@ -446,17 +470,17 @@ def can_rebuy(history, current_price):
     elapsed = datetime.utcnow() - last_time
     elapsed_min = elapsed.total_seconds() / 60
 
-    print("[REBUY] آخِرُ شِرَاءٍ: %.2f | الحَالِيُّ: %.2f | مَرَّتْ: %.1f دَقِيقَة" % (last_price, current_price, elapsed_min))
+    print("[REBUY] آخِرُ شِرَاءٍ: %.2f | الحَالِيُّ: %.2f | مَرَّتْ: %.1f دَقِيقَة" % (last_price, current_price, elapsed_min))
 
     if elapsed < timedelta(minutes=REBUY_WAIT_MINUTES):
-        print("[REBUY] لَمْ تَتَحَقَّقStack: مَرَّتْ %.1f دَقِيقَة فَقَطْ (المَطْلُوبُ %d)" % (elapsed_min, REBUY_WAIT_MINUTES))
+        print("[REBUY] لَمْ تَتَحَقَّقْ: مَرَّتْ %.1f دَقِيقَة فَقَطْ (المَطْلُوبُ %d)" % (elapsed_min, REBUY_WAIT_MINUTES))
         return False
 
     if current_price >= last_price:
-        print("[REBUY] لَمْ تَتَحَقَّقْ: السِّعْرُ %.2f لَيْسَ أَقَلَّ مِنْ %.2f" % (current_price, last_price))
+        print("[REBUY] لَمْ تَتَحَقَّقْ: السِّعْرُ %.2f لَيْسَ أَقَلَّ مِنْ %.2f" % (current_price, last_price))
         return False
 
-    print("[REBUY] تَحَقَّقَتْ جَمِيعُ الشُّرُوطِ!")
+    print("[REBUY] تَحَقَّقَتْ جَمِيعُ الشُّرُوطِ!")
     return True
 
 # ================= الدالة الرئيسية =================
@@ -476,9 +500,9 @@ def main():
     history = load_history()
     open_count = count_open_positions(history)
     
+    # تم التعديل هنا: لكي لا يقوم بالشراء فوراً عند إعادة التشغيل لضمان عدم خرق قانون الانتظار 10 دقائق بعد البيع
     if open_count == 0:
-        print("[START] لا توجد صفقات معلقة سابقة. إِجْرَاءُ أَوَّلِ عَمَلِيَّةِ شِرَاءٍ...")
-        create_buy_operation()
+        print("[START] لا توجد صفقات معلقة سابقة. سَيَبْدَأُ الفَحْصُ فِي الدَّوْرَةِ الرَّئِيسِيَّةِ...")
     else:
         print(f"[START] تم العثور على {open_count} صفقات معلقة سابقة. استئناف المراقبة فوراً...")
 
@@ -493,34 +517,58 @@ def main():
             # 1. جلب السعر الحالي
             current_price = get_current_price()
             if current_price is None:
-                print("│ [LOOP] فَشَلٌ فِي جَلْبِ السِّعْرِ، جَارِي الإِعَادَةُ...")
+                print("│ [LOOP] فَشَلٌ فِي جَلْبِ السِّعْرِ، جَارِي الإِعَادَةُ...")
                 time.sleep(5)
                 continue
 
             open_count = count_open_positions(history)
             
             # 2. فحص البيع لكل عملية مفتوحة
-            print("│ [خُطْوَةُ 1] فَحْصُ البَيْعِ لِلْعَمَلِيَّاتِ المَفْتُوحَةِ (%d)" % open_count)
+            print("│ [خُطْوَةُ 1] فَحْصُ البَيْعِ لِلْعَمَلِيَّاتِ المَفْتُوحَةِ (%d)" % open_count)
             sold, history = try_sell_all(history, current_price)
 
             # 3. اتخاذ القرار بناءً على حالة البيع والحد الأقصى للمراكز المفتوحة
             if sold:
-                print("│ [النَّتِيجَةُ] يَبِيعُ! تَمَّتْ عَمَلِيَّةُ البَيْعِ بِنَجَاحٍ.")
+                print("│ [النَّتِيجَةُ] يَبِيعُ! تَمَّتْ عَمَلِيَّةُ البَيْعِ بِنَجَاحٍ.")
                 save_history(history)
                 git_commit_and_push()
             else:
-                print("│ [النَّتِيجَةُ] لَمْ يَبِعْ → فَحْصُ إِعَادَةِ الشِّرَاءِ...")
+                print("│ [النَّتِيجَةُ] لَمْ يَبِعْ → فَحْصُ إِعَادَةِ الشِّرَاءِ...")
                 if open_count < MAX_OPEN_POSITIONS:
-                    if open_count == 0:
-                        print("│ [شِرَاءٌ] لَا تُوجَدُ صَفَقَاتٌ! شِرَاءٌ فَوْرِيٌّ...")
-                        create_buy_operation()
-                    elif can_rebuy(history, current_price):
-                        print("│ [شِرَاءٌ] يَشْتَرِي! الشُّرُوطُ مُطَابِقَةٌ...")
-                        create_buy_operation()
+                    
+                    # --- التعديلات المطلوبة تم إضافتها هنا بدقة ---
+                    if current_price > 69.70:
+                        print("│ [تَجَاوُزٌ] السِّعْرُ الحَالِيُّ (%.2f) أَكْبَرُ مِنْ 69.70. تَمَّ إِيقَافُ الشِّرَاءِ." % current_price)
                     else:
-                        print("│ [تَجَاوُزٌ] شُرُوطُ الشِّرَاءِ لَمْ تَتَحَقَّقْ بَعْدُ.")
+                        last_sell_time = get_last_sell_time(history)
+                        wait_sell_ok = True
+                        
+                        # فحص شرط الانتظار 10 دقائق بعد أي عملية بيع
+                        if last_sell_time:
+                            elapsed_since_sell = (datetime.utcnow() - last_sell_time).total_seconds() / 60
+                            if elapsed_since_sell < 10.0:
+                                print("│ [تَجَاوُزٌ] اِنْتِظَارُ 10 دَقَائِقَ بَعْدَ البَيْعِ. (مَرَّتْ %.1f دَقِيقَة)" % elapsed_since_sell)
+                                wait_sell_ok = False
+                        
+                        if wait_sell_ok:
+                            if open_count == 0:
+                                abs_last_buy_price = get_absolute_last_buy_price(history)
+                                if abs_last_buy_price is None:
+                                    print("│ [شِرَاءٌ] لَا تُوجَدُ أَيُّ صَفَقَاتٍ فِي السِّجِلِّ! شِرَاءٌ فَوْرِيٌّ...")
+                                    create_buy_operation()
+                                elif current_price <= abs_last_buy_price:
+                                    print("│ [شِرَاءٌ] مَرَّتْ 10 دَقَائِقَ، وَالسِّعْرُ (%.2f) <= آخِرِ شِرَاءٍ (%.2f). جَارِي الشِّرَاءُ..." % (current_price, abs_last_buy_price))
+                                    create_buy_operation()
+                                else:
+                                    print("│ [تَجَاوُزٌ] بَعْدَ البَيْعِ السِّعْرُ (%.2f) أَكْبَرُ مِنْ آخِرِ شِرَاءٍ (%.2f). نَنْتَظِرُ اِنْخِفَاضَهُ..." % (current_price, abs_last_buy_price))
+                            elif can_rebuy(history, current_price):
+                                print("│ [شِرَاءٌ] يَشْتَرِي! الشُّرُوطُ مُطَابِقَةٌ...")
+                                create_buy_operation()
+                            else:
+                                print("│ [تَجَاوُزٌ] شُرُوطُ الشِّرَاءِ لَمْ تَتَحَقَّقْ بَعْدُ.")
+                    # ---------------------------------------------
                 else:
-                    print("│ [تَحْذِيرٌ] تَمَّ بُلُوغُ الحَدِّ الأَقْصَى لِلصَّفَقَاتِ (%d)." % MAX_OPEN_POSITIONS)
+                    print("│ [تَحْذِيرٌ] تَمَّ بُلُوغُ الحَدِّ الأَقْصَى لِلصَّفَقَاتِ (%d)." % MAX_OPEN_POSITIONS)
 
             # 4. يعيد الدورة
             print("└─────────────────────────────────────┘")
@@ -535,7 +583,7 @@ def main():
         sleep_time = max(0, SLEEP_SECONDS - elapsed)
         time.sleep(sleep_time)
 
-    print("[END] تَمَّ الاِنْتِهَاءُ مِنَ الدَّوْرَةِ زَمَنِيًّا!")
+    print("[END] تَمَّ الاِنْتِهَاءُ مِنَ الدَّوْرَةِ زَمَنِيًّا!")
 
 if __name__ == "__main__":
     main()
