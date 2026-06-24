@@ -155,7 +155,7 @@
     },
     "buy_d9754ce4": {
         "type": "buy",
-        "status": "معلقة - جاري الانتظار",
+        "status": "تم البيع",
         "date": "2026-06-24",
         "time": "14:16:26.331049",
         "buy_time": "2026-06-24T14:16:26.331049",
@@ -168,6 +168,15 @@
         "total_cost": 20.0035,
         "break_even_price": 68.98,
         "min_sell_price": 68.99,
-        "sell_details": {}
+        "sell_details": {
+            "sell_id": "sell_eeb41375",
+            "sell_price": 68.99,
+            "received_usd": 19.9381,
+            "sell_fee_usd": 0.0199,
+            "profit_usd": -0.0654,
+            "profit_percent": -0.327,
+            "sell_date": "2026-06-24",
+            "sell_time": "14:25:23.758888"
+        }
     }
 }
