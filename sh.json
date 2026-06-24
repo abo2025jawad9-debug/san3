@@ -1,1 +1,19 @@
-
+{
+    "buy_ded9c400": {
+        "type": "buy",
+        "status": "معلقة - جاري الانتظار",
+        "date": "2026-06-24",
+        "time": "21:45:31.911946",
+        "buy_time": "2026-06-24T21:45:31.911946",
+        "buy_price": 67.86,
+        "qty": 0.294,
+        "sellable_qty": 0.293706,
+        "buy_amount_usd": 20.0,
+        "buy_fee_usd": 0.0199,
+        "buy_cost": 19.9508,
+        "total_cost": 19.9907,
+        "break_even_price": 68.0,
+        "min_sell_price": 68.06,
+        "sell_details": {}
+    }
+}
