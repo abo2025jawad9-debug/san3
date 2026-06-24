@@ -333,7 +333,6 @@ def get_last_buy_time(history):
     times = [datetime.fromisoformat(op['buy_time']) for op in open_ops.values() if op.get('buy_time')]
     return max(times) if times else None
 
-# دوال جديدة للتحقق من شروط البيع المضافة
 def get_last_sell_time(history):
     sell_times = []
     for op in history.values():
@@ -429,7 +428,6 @@ def try_sell_all(history, current_price):
             order, received, sell_fee, sell_price = execute_sell(qty)
 
             if order:
-                # تصحيح دقيق لمعادلة حساب الأرباح الصافية الحقيقية في الأرشفة
                 actual_profit = received - buy_cost - buy_fee - sell_fee
                 sold_any = True
 
@@ -496,11 +494,9 @@ def main():
     start_time = time.time()
     end_time = start_time + (RUN_DURATION_HOURS * 3600)
 
-    # فحص تاريخ العمليات الحالي لضمان عدم خرق حاجز الـ 7 صفقات عند البدء أو إعادة التشغيل
     history = load_history()
     open_count = count_open_positions(history)
     
-    # تم التعديل هنا: لكي لا يقوم بالشراء فوراً عند إعادة التشغيل لضمان عدم خرق قانون الانتظار 10 دقائق بعد البيع
     if open_count == 0:
         print("[START] لا توجد صفقات معلقة سابقة. سَيَبْدَأُ الفَحْصُ فِي الدَّوْرَةِ الرَّئِيسِيَّةِ...")
     else:
@@ -514,7 +510,6 @@ def main():
             
             print("\n┌─────────────────────────────────────┐")
             
-            # 1. جلب السعر الحالي
             current_price = get_current_price()
             if current_price is None:
                 print("│ [LOOP] فَشَلٌ فِي جَلْبِ السِّعْرِ، جَارِي الإِعَادَةُ...")
@@ -523,11 +518,9 @@ def main():
 
             open_count = count_open_positions(history)
             
-            # 2. فحص البيع لكل عملية مفتوحة
             print("│ [خُطْوَةُ 1] فَحْصُ البَيْعِ لِلْعَمَلِيَّاتِ المَفْتُوحَةِ (%d)" % open_count)
             sold, history = try_sell_all(history, current_price)
 
-            # 3. اتخاذ القرار بناءً على حالة البيع والحد الأقصى للمراكز المفتوحة
             if sold:
                 print("│ [النَّتِيجَةُ] يَبِيعُ! تَمَّتْ عَمَلِيَّةُ البَيْعِ بِنَجَاحٍ.")
                 save_history(history)
@@ -535,15 +528,13 @@ def main():
             else:
                 print("│ [النَّتِيجَةُ] لَمْ يَبِعْ → فَحْصُ إِعَادَةِ الشِّرَاءِ...")
                 if open_count < MAX_OPEN_POSITIONS:
-                    
-                    # --- التعديلات المطلوبة تم إضافتها هنا بدقة ---
                     if current_price > 69.70:
                         print("│ [تَجَاوُزٌ] السِّعْرُ الحَالِيُّ (%.2f) أَكْبَرُ مِنْ 69.70. تَمَّ إِيقَافُ الشِّرَاءِ." % current_price)
                     else:
                         last_sell_time = get_last_sell_time(history)
                         wait_sell_ok = True
+                        elapsed_since_sell = 0.0
                         
-                        # فحص شرط الانتظار 10 دقائق بعد أي عملية بيع
                         if last_sell_time:
                             elapsed_since_sell = (datetime.utcnow() - last_sell_time).total_seconds() / 60
                             if elapsed_since_sell < 10.0:
@@ -556,21 +547,25 @@ def main():
                                 if abs_last_buy_price is None:
                                     print("│ [شِرَاءٌ] لَا تُوجَدُ أَيُّ صَفَقَاتٍ فِي السِّجِلِّ! شِرَاءٌ فَوْرِيٌّ...")
                                     create_buy_operation()
-                                elif current_price <= abs_last_buy_price:
-                                    print("│ [شِرَاءٌ] مَرَّتْ 10 دَقَائِقَ، وَالسِّعْرُ (%.2f) <= آخِرِ شِرَاءٍ (%.2f). جَارِي الشِّرَاءُ..." % (current_price, abs_last_buy_price))
-                                    create_buy_operation()
                                 else:
-                                    print("│ [تَجَاوُزٌ] بَعْدَ البَيْعِ السِّعْرُ (%.2f) أَكْبَرُ مِنْ آخِرِ شِرَاءٍ (%.2f). نَنْتَظِرُ اِنْخِفَاضَهُ..." % (current_price, abs_last_buy_price))
+                                    # التعديل الجديد: تفريغ الذاكرة الزمنية بعد مرور 60 دقيقة (ساعة واحدة)
+                                    if elapsed_since_sell >= 60.0:
+                                        print("│ [شِرَاءٌ] مَرَّتْ سَاعَةٌ كَامِلَةٌ بِدُونِ صَفَقَاتٍ مَفْتُوحَةٍ (تَفْرِيغُ الذَّاكِرَةِ). تَجَاهُلُ آخِرِ سِعْرٍ (%.2f) وَالشِّرَاءُ الحَالِيُّ (%.2f)..." % (abs_last_buy_price, current_price))
+                                        create_buy_operation()
+                                    elif current_price <= abs_last_buy_price:
+                                        print("│ [شِرَاءٌ] مَرَّتْ 10 دَقَائِقَ، وَالسِّعْرُ (%.2f) <= آخِرِ شِرَاءٍ (%.2f). جَارِي الشِّرَاءُ..." % (current_price, abs_last_buy_price))
+                                        create_buy_operation()
+                                    else:
+                                        minutes_left = 60.0 - elapsed_since_sell
+                                        print("│ [تَجَاوُزٌ] السِّعْرُ (%.2f) أَكْبَرُ مِنْ آخِرِ شِرَاءٍ (%.2f). نَنْتَظِرُ اِنْخِفَاضَهُ أَوْ مُرُورَ (%.1f) دَقِيقَة لِنِسْيَانِ السِّعْرِ..." % (current_price, abs_last_buy_price, minutes_left))
                             elif can_rebuy(history, current_price):
                                 print("│ [شِرَاءٌ] يَشْتَرِي! الشُّرُوطُ مُطَابِقَةٌ...")
                                 create_buy_operation()
                             else:
                                 print("│ [تَجَاوُزٌ] شُرُوطُ الشِّرَاءِ لَمْ تَتَحَقَّقْ بَعْدُ.")
-                    # ---------------------------------------------
                 else:
                     print("│ [تَحْذِيرٌ] تَمَّ بُلُوغُ الحَدِّ الأَقْصَى لِلصَّفَقَاتِ (%d)." % MAX_OPEN_POSITIONS)
 
-            # 4. يعيد الدورة
             print("└─────────────────────────────────────┘")
 
         except Exception as e:
