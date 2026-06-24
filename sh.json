@@ -467,7 +467,7 @@
     },
     "buy_bad4b722": {
         "type": "buy",
-        "status": "معلقة - جاري الانتظار",
+        "status": "تم البيع",
         "date": "2026-06-24",
         "time": "01:01:31.329527",
         "buy_time": "2026-06-24T01:01:31.329527",
@@ -480,6 +480,15 @@
         "total_cost": 20.0371,
         "break_even_price": 70.06,
         "min_sell_price": 70.06,
-        "sell_details": {}
+        "sell_details": {
+            "sell_id": "sell_222f54c4",
+            "sell_price": 70.06,
+            "received_usd": 19.9671,
+            "sell_fee_usd": 0.02,
+            "profit_usd": -0.07,
+            "profit_percent": -0.35,
+            "sell_date": "2026-06-24",
+            "sell_time": "01:31:14.198100"
+        }
     }
 }
