@@ -32,5 +32,22 @@
         "break_even_price": 68.18,
         "min_sell_price": 68.52,
         "sell_details": {}
+    },
+    "buy_dc453dfb": {
+        "type": "buy",
+        "status": "معلقة - جاري الانتظار",
+        "date": "2026-06-24",
+        "time": "22:24:33.208029",
+        "buy_time": "2026-06-24T22:24:33.208029",
+        "buy_price": 67.93,
+        "qty": 0.294,
+        "sellable_qty": 0.293706,
+        "buy_amount_usd": 20.0,
+        "buy_fee_usd": 0.02,
+        "buy_cost": 19.9714,
+        "total_cost": 20.0114,
+        "break_even_price": 68.07,
+        "min_sell_price": 68.41,
+        "sell_details": {}
     }
 }
