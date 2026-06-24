@@ -58,5 +58,22 @@
         "break_even_price": 69.81,
         "min_sell_price": 69.81,
         "sell_details": {}
+    },
+    "buy_cb35fc41": {
+        "type": "buy",
+        "status": "معلقة - جاري الانتظار",
+        "date": "2026-06-24",
+        "time": "00:04:27.792939",
+        "buy_time": "2026-06-24T00:04:27.792939",
+        "buy_price": 69.67,
+        "qty": 0.287,
+        "sellable_qty": 0.286713,
+        "buy_amount_usd": 20.0,
+        "buy_fee_usd": 0.02,
+        "buy_cost": 19.9953,
+        "total_cost": 20.0353,
+        "break_even_price": 69.81,
+        "min_sell_price": 69.81,
+        "sell_details": {}
     }
 }
