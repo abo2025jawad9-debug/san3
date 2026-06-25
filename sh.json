@@ -437,5 +437,22 @@
         "break_even_price": 69.13,
         "min_sell_price": 69.47,
         "sell_details": {}
+    },
+    "buy_ec21aff8": {
+        "type": "buy",
+        "status": "معلقة - جاري الانتظار",
+        "date": "2026-06-25",
+        "time": "09:35:55.271661",
+        "buy_time": "2026-06-25T09:35:55.271661",
+        "buy_price": 68.93,
+        "qty": 0.29,
+        "sellable_qty": 0.28971,
+        "buy_amount_usd": 20.0,
+        "buy_fee_usd": 0.02,
+        "buy_cost": 19.9897,
+        "total_cost": 20.0297,
+        "break_even_price": 69.07,
+        "min_sell_price": 69.41,
+        "sell_details": {}
     }
 }
