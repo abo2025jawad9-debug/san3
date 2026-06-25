@@ -177,5 +177,22 @@
         "break_even_price": 67.96,
         "min_sell_price": 68.3,
         "sell_details": {}
+    },
+    "buy_d1a926ab": {
+        "type": "buy",
+        "status": "معلقة - جاري الانتظار",
+        "date": "2026-06-25",
+        "time": "00:53:24.979422",
+        "buy_time": "2026-06-25T00:53:24.979422",
+        "buy_price": 67.82,
+        "qty": 0.294,
+        "sellable_qty": 0.293706,
+        "buy_amount_usd": 20.0,
+        "buy_fee_usd": 0.0199,
+        "buy_cost": 19.9391,
+        "total_cost": 19.979,
+        "break_even_price": 67.96,
+        "min_sell_price": 68.3,
+        "sell_details": {}
     }
 }
