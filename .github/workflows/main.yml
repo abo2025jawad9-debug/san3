@@ -2,7 +2,7 @@ name: Binance Trading Bot
 
 on:
   schedule:
-    - cron: '0 */7 * * *' # التشغيل التلقائي كل 7 ساعات تماماً
+    - cron: '0 */6 * * *' # التشغيل التلقائي كل 7 ساعات تماماً
   workflow_dispatch: # للسماح بالتشغيل اليدوي في أي وقت
 
 permissions:
