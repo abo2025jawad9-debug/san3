@@ -34,7 +34,7 @@ TAKER_FEE_PERCENT = 0.001
 MIN_PROFIT_USD = 0.1  # هامش أمان فوق سعر التعادل لضمان عدم الخسارة مطلقا
 
 JSON_FILE = 'sh.json'
-MAX_OPEN_POSITIONS = 10
+MAX_OPEN_POSITIONS = 20
 REBUY_WAIT_MINUTES = 7
 SLEEP_SECONDS = 1
 RUN_DURATION_HOURS = 6
