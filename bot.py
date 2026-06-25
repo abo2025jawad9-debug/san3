@@ -528,7 +528,7 @@ def main():
             else:
                 print("│ [النَّتِيجَةُ] لَمْ يَبِعْ → فَحْصُ إِعَادَةِ الشِّرَاءِ...")
                 if open_count < MAX_OPEN_POSITIONS:
-                    if current_price > 69.70:
+                    if current_price > 68.10:
                         print("│ [تَجَاوُزٌ] السِّعْرُ الحَالِيُّ (%.2f) أَكْبَرُ مِنْ 69.70. تَمَّ إِيقَافُ الشِّرَاءِ." % current_price)
                     else:
                         last_sell_time = get_last_sell_time(history)
