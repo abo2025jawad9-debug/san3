@@ -1,7 +1,7 @@
 {
     "buy_7c217d2d": {
         "type": "buy",
-        "status": "معلقة - جاري الانتظار",
+        "status": "تم البيع",
         "date": "2026-06-24",
         "time": "22:10:30.594578",
         "buy_time": "2026-06-24T22:10:30.594578",
@@ -14,11 +14,20 @@
         "total_cost": 20.0226,
         "break_even_price": 68.34,
         "min_sell_price": 68.68,
-        "sell_details": {}
+        "sell_details": {
+            "sell_id": "sell_4eed06a9",
+            "sell_price": 68.98,
+            "received_usd": 20.1422,
+            "sell_fee_usd": 0.0201,
+            "profit_usd": 0.1194,
+            "profit_percent": 0.597,
+            "sell_date": "2026-06-25",
+            "sell_time": "05:11:39.978642"
+        }
     },
     "buy_996c82b4": {
         "type": "buy",
-        "status": "معلقة - جاري الانتظار",
+        "status": "تم البيع",
         "date": "2026-06-24",
         "time": "22:17:32.149390",
         "buy_time": "2026-06-24T22:17:32.149390",
@@ -31,11 +40,20 @@
         "total_cost": 19.9756,
         "break_even_price": 68.18,
         "min_sell_price": 68.52,
-        "sell_details": {}
+        "sell_details": {
+            "sell_id": "sell_9ac9cba5",
+            "sell_price": 68.98,
+            "received_usd": 20.1422,
+            "sell_fee_usd": 0.0201,
+            "profit_usd": 0.1664,
+            "profit_percent": 0.834,
+            "sell_date": "2026-06-25",
+            "sell_time": "05:11:41.328883"
+        }
     },
     "buy_dc453dfb": {
         "type": "buy",
-        "status": "معلقة - جاري الانتظار",
+        "status": "تم البيع",
         "date": "2026-06-24",
         "time": "22:24:33.208029",
         "buy_time": "2026-06-24T22:24:33.208029",
@@ -48,11 +66,20 @@
         "total_cost": 20.0114,
         "break_even_price": 68.07,
         "min_sell_price": 68.41,
-        "sell_details": {}
+        "sell_details": {
+            "sell_id": "sell_4a928f82",
+            "sell_price": 68.98,
+            "received_usd": 20.2111,
+            "sell_fee_usd": 0.0202,
+            "profit_usd": 0.1995,
+            "profit_percent": 0.998,
+            "sell_date": "2026-06-25",
+            "sell_time": "05:11:42.650753"
+        }
     },
     "buy_7a99f0dc": {
         "type": "buy",
-        "status": "معلقة - جاري الانتظار",
+        "status": "تم البيع",
         "date": "2026-06-24",
         "time": "22:32:23.554120",
         "buy_time": "2026-06-24T22:32:23.554120",
@@ -65,11 +92,20 @@
         "total_cost": 20.0084,
         "break_even_price": 68.06,
         "min_sell_price": 68.4,
-        "sell_details": {}
+        "sell_details": {
+            "sell_id": "sell_37e446ff",
+            "sell_price": 68.98,
+            "received_usd": 20.2111,
+            "sell_fee_usd": 0.0202,
+            "profit_usd": 0.2024,
+            "profit_percent": 1.013,
+            "sell_date": "2026-06-25",
+            "sell_time": "05:11:43.977986"
+        }
     },
     "buy_8dda70b0": {
         "type": "buy",
-        "status": "معلقة - جاري الانتظار",
+        "status": "تم البيع",
         "date": "2026-06-24",
         "time": "22:39:25.027745",
         "buy_time": "2026-06-24T22:39:25.027745",
@@ -82,11 +118,20 @@
         "total_cost": 19.9907,
         "break_even_price": 68.0,
         "min_sell_price": 68.34,
-        "sell_details": {}
+        "sell_details": {
+            "sell_id": "sell_fc1a2ac4",
+            "sell_price": 68.98,
+            "received_usd": 20.2111,
+            "sell_fee_usd": 0.0202,
+            "profit_usd": 0.2201,
+            "profit_percent": 1.102,
+            "sell_date": "2026-06-25",
+            "sell_time": "05:11:45.317152"
+        }
     },
     "buy_ce7ce7f0": {
         "type": "buy",
-        "status": "معلقة - جاري الانتظار",
+        "status": "تم البيع",
         "date": "2026-06-24",
         "time": "22:46:54.077161",
         "buy_time": "2026-06-24T22:46:54.077161",
@@ -99,11 +144,20 @@
         "total_cost": 19.9878,
         "break_even_price": 67.99,
         "min_sell_price": 68.33,
-        "sell_details": {}
+        "sell_details": {
+            "sell_id": "sell_92b2b272",
+            "sell_price": 68.98,
+            "received_usd": 20.2111,
+            "sell_fee_usd": 0.0202,
+            "profit_usd": 0.2231,
+            "profit_percent": 1.117,
+            "sell_date": "2026-06-25",
+            "sell_time": "05:11:46.893191"
+        }
     },
     "buy_7e06560e": {
         "type": "buy",
-        "status": "معلقة - جاري الانتظار",
+        "status": "تم البيع",
         "date": "2026-06-24",
         "time": "22:53:55.725170",
         "buy_time": "2026-06-24T22:53:55.725170",
@@ -116,7 +170,16 @@
         "total_cost": 19.9848,
         "break_even_price": 67.98,
         "min_sell_price": 68.32,
-        "sell_details": {}
+        "sell_details": {
+            "sell_id": "sell_64d2646e",
+            "sell_price": 68.98,
+            "received_usd": 20.2111,
+            "sell_fee_usd": 0.0202,
+            "profit_usd": 0.226,
+            "profit_percent": 1.132,
+            "sell_date": "2026-06-25",
+            "sell_time": "05:11:48.261946"
+        }
     },
     "buy_39e831d0": {
         "type": "buy",
@@ -146,7 +209,7 @@
     },
     "buy_a99e8583": {
         "type": "buy",
-        "status": "معلقة - جاري الانتظار",
+        "status": "تم البيع",
         "date": "2026-06-25",
         "time": "00:38:22.131260",
         "buy_time": "2026-06-25T00:38:22.131260",
@@ -159,11 +222,20 @@
         "total_cost": 19.979,
         "break_even_price": 67.96,
         "min_sell_price": 68.3,
-        "sell_details": {}
+        "sell_details": {
+            "sell_id": "sell_e83f25c9",
+            "sell_price": 68.98,
+            "received_usd": 20.2111,
+            "sell_fee_usd": 0.0202,
+            "profit_usd": 0.2319,
+            "profit_percent": 1.162,
+            "sell_date": "2026-06-25",
+            "sell_time": "05:11:49.597760"
+        }
     },
     "buy_3a217b15": {
         "type": "buy",
-        "status": "معلقة - جاري الانتظار",
+        "status": "تم البيع",
         "date": "2026-06-25",
         "time": "00:45:23.322523",
         "buy_time": "2026-06-25T00:45:23.322523",
@@ -176,11 +248,20 @@
         "total_cost": 19.979,
         "break_even_price": 67.96,
         "min_sell_price": 68.3,
-        "sell_details": {}
+        "sell_details": {
+            "sell_id": "sell_f997179f",
+            "sell_price": 68.98,
+            "received_usd": 20.2111,
+            "sell_fee_usd": 0.0202,
+            "profit_usd": 0.2319,
+            "profit_percent": 1.162,
+            "sell_date": "2026-06-25",
+            "sell_time": "05:11:50.932380"
+        }
     },
     "buy_d1a926ab": {
         "type": "buy",
-        "status": "معلقة - جاري الانتظار",
+        "status": "تم البيع",
         "date": "2026-06-25",
         "time": "00:53:24.979422",
         "buy_time": "2026-06-25T00:53:24.979422",
@@ -193,6 +274,15 @@
         "total_cost": 19.979,
         "break_even_price": 67.96,
         "min_sell_price": 68.3,
-        "sell_details": {}
+        "sell_details": {
+            "sell_id": "sell_e9f3cef4",
+            "sell_price": 68.91,
+            "received_usd": 20.1906,
+            "sell_fee_usd": 0.0202,
+            "profit_usd": 0.2114,
+            "profit_percent": 1.059,
+            "sell_date": "2026-06-25",
+            "sell_time": "05:11:52.254772"
+        }
     }
 }
