@@ -29,7 +29,7 @@ TELEGRAM_TOKEN = cfg.telegram_token
 TELEGRAM_CHAT_ID = cfg.telegram_chat_id
 
 SYMBOL = 'SOLUSDT'
-BUY_AMOUNT_USD = 20.0
+BUY_AMOUNT_USD = 5.0
 TAKER_FEE_PERCENT = 0.001
 MIN_PROFIT_USD = 0.1  # هامش أمان فوق سعر التعادل لضمان عدم الخسارة مطلقا
 
