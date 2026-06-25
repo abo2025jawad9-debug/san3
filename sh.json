@@ -457,7 +457,7 @@
     },
     "buy_919e6302": {
         "type": "buy",
-        "status": "معلقة - جاري الانتظار",
+        "status": "تم البيع",
         "date": "2026-06-25",
         "time": "20:13:47.992036",
         "buy_time": "2026-06-25T20:13:47.992036",
@@ -470,11 +470,20 @@
         "total_cost": 19.9809,
         "break_even_price": 66.6,
         "min_sell_price": 66.94,
-        "sell_details": {}
+        "sell_details": {
+            "sell_id": "sell_665a88bf",
+            "sell_price": 66.96,
+            "received_usd": 20.021,
+            "sell_fee_usd": 0.02,
+            "profit_usd": 0.04,
+            "profit_percent": 0.2,
+            "sell_date": "2026-06-25",
+            "sell_time": "21:33:20.598408"
+        }
     },
     "buy_f82d0b78": {
         "type": "buy",
-        "status": "معلقة - جاري الانتظار",
+        "status": "تم البيع",
         "date": "2026-06-25",
         "time": "20:39:11.869253",
         "buy_time": "2026-06-25T20:39:11.869253",
@@ -487,11 +496,20 @@
         "total_cost": 19.9809,
         "break_even_price": 66.6,
         "min_sell_price": 66.94,
-        "sell_details": {}
+        "sell_details": {
+            "sell_id": "sell_ff482a88",
+            "sell_price": 66.96,
+            "received_usd": 20.021,
+            "sell_fee_usd": 0.02,
+            "profit_usd": 0.0401,
+            "profit_percent": 0.201,
+            "sell_date": "2026-06-25",
+            "sell_time": "21:33:21.920440"
+        }
     },
     "buy_36726a48": {
         "type": "buy",
-        "status": "معلقة - جاري الانتظار",
+        "status": "تم البيع",
         "date": "2026-06-25",
         "time": "20:46:13.550137",
         "buy_time": "2026-06-25T20:46:13.550137",
@@ -504,7 +522,16 @@
         "total_cost": 20.0384,
         "break_even_price": 66.57,
         "min_sell_price": 66.91,
-        "sell_details": {}
+        "sell_details": {
+            "sell_id": "sell_592f14d4",
+            "sell_price": 66.96,
+            "received_usd": 20.088,
+            "sell_fee_usd": 0.0201,
+            "profit_usd": 0.0495,
+            "profit_percent": 0.247,
+            "sell_date": "2026-06-25",
+            "sell_time": "21:33:23.204138"
+        }
     },
     "buy_3f8894da": {
         "type": "buy",
