@@ -127,5 +127,22 @@
         "break_even_price": 76.49,
         "min_sell_price": 78.03,
         "sell_details": {}
+    },
+    "buy_df696cdb": {
+        "type": "buy",
+        "status": "معلقة - جاري الانتظار",
+        "date": "2026-07-27",
+        "time": "04:12:05.216843",
+        "buy_time": "2026-07-27T04:12:05.216843",
+        "buy_price": 76.34,
+        "qty": 0.065,
+        "sellable_qty": 0.064935,
+        "buy_amount_usd": 5.0,
+        "buy_fee_usd": 0.005,
+        "buy_cost": 4.9621,
+        "total_cost": 4.972,
+        "break_even_price": 76.49,
+        "min_sell_price": 78.03,
+        "sell_details": {}
     }
 }
