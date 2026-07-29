@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from dataclasses import dataclass
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
+import numpy as np  # للحسابات الإحصائية (SMA)
 
 # ==========================================
 # CONFIGURATION
@@ -29,20 +30,33 @@ TELEGRAM_TOKEN = cfg.telegram_token
 TELEGRAM_CHAT_ID = cfg.telegram_chat_id
 
 SYMBOL = 'SOLUSDT'
-BUY_AMOUNT_USD = 5.0
-TAKER_FEE_PERCENT = 0.001
-MIN_PROFIT_USD = 0.1  # هامش أمان فوق سعر التعادل لضمان عدم الخسارة مطلقا
 
+# ===== استراتيجية DCA متعددة المراحل =====
+BUY_AMOUNT_USD = 5.0          # المبلغ الأساسي لكل شراء
+MAX_OPEN_POSITIONS = 3        # عدد مراحل الشراء (يتم تعديله ديناميكياً)
+DCA_STEPS = [0.0, -1.5, -3.0] # نسب الانخفاض عن آخر سعر شراء (بالنسبة المئوية)
+DCA_MULTIPLIERS = [1.0, 1.5, 2.0] # مضاعفات المبلغ لكل مرحلة (1x, 1.5x, 2x)
+
+# ===== إعدادات البيع =====
+PROFIT_TARGET_PERCENT = 0.8   # هدف الربح الديناميكي (0.8%)
+TRAILING_STOP_PERCENT = 2.0   # وقف الخسارة المتحرك (2% من أعلى سعر)
+MIN_PROFIT_USD = 0.05         # هامش أمان صغير جداً (يُستخدم كحد أدنى)
+
+# ===== إعدادات المؤشرات =====
+SMA_PERIOD = 20               # فترة المتوسط المتحرك البسيط
+RSI_PERIOD = 14               # فترة مؤشر القوة النسبية
+RSI_OVERSOLD = 40             # منطقة تشبع بيعي (شراء إذا كان أقل)
+
+# ===== إعدادات عامة =====
 JSON_FILE = 'sh.json'
-MAX_OPEN_POSITIONS = 5
-REBUY_WAIT_MINUTES = 7
-SLEEP_SECONDS = 1
+REBUY_WAIT_MINUTES = 5        # انتظار بين مراحل الشراء
+SLEEP_SECONDS = 2
 RUN_DURATION_HOURS = 6
 
 PROXY_LIST = []
 client = None
 
-# ================= بروكسيات =================
+# ================= بروكسيات (محسّنة) =================
 
 def fetch_free_proxies():
     proxies = []
@@ -142,13 +156,15 @@ def init_client_with_retries():
         PROXY_LIST = []
         time.sleep(5)
 
-# ================= تليجرام =================
+# ================= تليجرام (مع علامة "حساب تجريبي") =================
 
 def send_telegram_message(message):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         return False
+    # إضافة علامة "حساب تجريبي" في أعلى كل رسالة
+    full_message = "🧪 <b>حساب تجريبي - Testnet</b>\n" + message
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"}
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": full_message, "parse_mode": "HTML"}
     for attempt in range(1, 4):
         try:
             response = requests.post(url, json=payload, timeout=10)
@@ -190,16 +206,84 @@ def git_commit_and_push():
             time.sleep(2)
     return False
 
+# ================= المؤشرات الفنية =================
+
+def get_klines(limit=50):
+    """جلب بيانات الشموع لحساب SMA و RSI"""
+    try:
+        klines = client.get_klines(symbol=SYMBOL, interval=Client.KLINE_INTERVAL_15MINUTE, limit=limit)
+        closes = [float(k[4]) for k in klines]
+        volumes = [float(k[5]) for k in klines]
+        return closes, volumes
+    except Exception as e:
+        print("[INDICATOR] فَشَلَ جَلْبُ الشَّمُوعِ: %s" % e)
+        return None, None
+
+def calculate_sma(closes, period=SMA_PERIOD):
+    if len(closes) < period:
+        return None
+    return sum(closes[-period:]) / period
+
+def calculate_rsi(closes, period=RSI_PERIOD):
+    if len(closes) < period + 1:
+        return None
+    deltas = [closes[i] - closes[i-1] for i in range(1, len(closes))]
+    gains = [d if d > 0 else 0 for d in deltas]
+    losses = [-d if d < 0 else 0 for d in deltas]
+    avg_gain = sum(gains[-period:]) / period
+    avg_loss = sum(losses[-period:]) / period
+    if avg_loss == 0:
+        return 100
+    rs = avg_gain / avg_loss
+    return 100 - (100 / (1 + rs))
+
+def get_trading_signal(current_price):
+    """إرجاع (signal, reason) حيث signal = 'buy' أو 'wait'"""
+    closes, volumes = get_klines(50)
+    if closes is None:
+        return 'wait', "فشل جلب البيانات"
+
+    sma = calculate_sma(closes)
+    rsi = calculate_rsi(closes)
+
+    # الشروط:
+    # 1. السعر الحالي أقل من SMA (إشارة شراء)
+    # 2. RSI أقل من 40 (منطقة تشبع بيعي)
+    # 3. حجم التداول أعلى من متوسط آخر 10 شموع (تأكيد)
+    avg_volume = np.mean(volumes[-10:]) if len(volumes) >= 10 else 0
+    current_volume = volumes[-1] if volumes else 0
+
+    buy_signals = []
+    if sma is not None and current_price < sma:
+        buy_signals.append(f"SMA ({sma:.2f})")
+    if rsi is not None and rsi < RSI_OVERSOLD:
+        buy_signals.append(f"RSI ({rsi:.1f})")
+    if current_volume > avg_volume * 0.8:  # حجم أعلى من 80% من المتوسط
+        buy_signals.append(f"Volume ({current_volume:.0f} > {avg_volume*0.8:.0f})")
+
+    if len(buy_signals) >= 2:  # على الأقل شرطان متحققان
+        return 'buy', f"إشارة شراء: {', '.join(buy_signals)}"
+    else:
+        return 'wait', f"انتظار: SMA={sma:.2f if sma else 'None'}, RSI={rsi:.1f if rsi else 'None'}"
+
 # ================= حسابات =================
 
 def calculate_sell_thresholds(buy_price, qty, buy_fee_usd):
     buy_cost = buy_price * qty
-    estimated_sell_fee = buy_cost * TAKER_FEE_PERCENT
+    # رسوم البيع المقدرة (0.1%)
+    estimated_sell_fee = buy_cost * 0.001
     total_fees = buy_fee_usd + estimated_sell_fee
     total_cost = buy_cost + total_fees
-    
+
+    # هدف الربح الديناميكي (نسبة مئوية)
+    profit_target = buy_cost * (PROFIT_TARGET_PERCENT / 100)
+    min_profit_price = (total_cost + max(profit_target, MIN_PROFIT_USD)) / qty
+
+    # سعر التعادل (بدون ربح)
     break_even = total_cost / qty
-    min_profit_price = (total_cost + MIN_PROFIT_USD) / qty
+
+    # وقف الخسارة المتحرك: سيتم حسابه لاحقاً بناءً على أعلى سعر بعد الشراء
+    trailing_stop_price = buy_price * (1 - TRAILING_STOP_PERCENT / 100)
 
     return {
         "buy_cost": buy_cost,
@@ -208,7 +292,8 @@ def calculate_sell_thresholds(buy_price, qty, buy_fee_usd):
         "total_fees": total_fees,
         "total_cost": total_cost,
         "break_even_price": break_even,
-        "min_sell_price": min_profit_price
+        "min_sell_price": min_profit_price,
+        "trailing_stop_price": trailing_stop_price
     }
 
 # ================= عمليات السوق =================
@@ -222,11 +307,26 @@ def get_current_price():
         print("[PRICE] فَشَلٌ فِي جَلْبِ السِّعْرِ: %s" % e)
         return None
 
-def execute_buy():
+def get_usdt_balance():
+    """جلب رصيد USDT في الحساب التجريبي"""
+    try:
+        account = client.get_account()
+        for asset in account['balances']:
+            if asset['asset'] == 'USDT':
+                return float(asset['free'])
+        return 0.0
+    except Exception as e:
+        print("[BALANCE] فَشَلَ جَلْبُ الرَّصِيدِ: %s" % e)
+        return 0.0
+
+def execute_buy(amount_usd=None):
+    if amount_usd is None:
+        amount_usd = BUY_AMOUNT_USD
+
     for attempt in range(1, 4):
         try:
             current_price = float(client.get_symbol_ticker(symbol=SYMBOL)['price'])
-            order = client.order_market_buy(symbol=SYMBOL, quoteOrderQty=BUY_AMOUNT_USD)
+            order = client.order_market_buy(symbol=SYMBOL, quoteOrderQty=amount_usd)
 
             fills = order.get('fills', [])
             total_fee_usd = 0.0
@@ -310,7 +410,7 @@ def execute_sell(qty):
 
     return None, 0, 0, 0
 
-# ================= منطق التداول الرئيسي =================
+# ================= منطق التداول الرئيسي (DCA + Trailing Stop) =================
 
 def count_open_positions(history):
     return sum(1 for op in history.values() if isinstance(op, dict) and op.get('status') == "معلقة - جاري الانتظار")
@@ -318,6 +418,11 @@ def count_open_positions(history):
 def get_open_positions(history):
     return {op_id: op for op_id, op in history.items() 
             if isinstance(op, dict) and op.get('status') == "معلقة - جاري الانتظار"}
+
+def get_open_positions_sorted(history):
+    """ترتيب الصفقات المفتوحة حسب وقت الشراء (الأقدم أولاً)"""
+    open_ops = get_open_positions(history)
+    return sorted(open_ops.items(), key=lambda x: x[1].get('buy_time', ''))
 
 def get_last_buy_price(history):
     open_ops = get_open_positions(history)
@@ -356,8 +461,11 @@ def get_absolute_last_buy_price(history):
     times.sort(key=lambda x: x[0])
     return times[-1][1]
 
-def create_buy_operation():
-    order, fee, qty, actual_price, total_cost, sellable_qty = execute_buy()
+def create_buy_operation(amount_usd=None):
+    if amount_usd is None:
+        amount_usd = BUY_AMOUNT_USD
+
+    order, fee, qty, actual_price, total_cost, sellable_qty = execute_buy(amount_usd)
 
     if order is None or qty <= 0:
         print("[BUY] فَشَلَ إِنْشَاءُ عَمَلِيَّةِ الشِّرَاءِ")
@@ -376,12 +484,14 @@ def create_buy_operation():
         "buy_price": round(actual_price, 2),
         "qty": round(qty, 8),
         "sellable_qty": round(sellable_qty, 8),
-        "buy_amount_usd": BUY_AMOUNT_USD,
+        "buy_amount_usd": round(amount_usd, 2),
         "buy_fee_usd": round(fee, 4),
         "buy_cost": round(calc['buy_cost'], 4),
         "total_cost": round(calc['total_cost'], 4),
         "break_even_price": round(calc['break_even_price'], 2),
         "min_sell_price": round(calc['min_sell_price'], 2),
+        "trailing_stop_price": round(calc['trailing_stop_price'], 2),
+        "highest_price": round(actual_price, 2),  # لتحديث أعلى سعر
         "sell_details": {}
     }
 
@@ -390,24 +500,47 @@ def create_buy_operation():
     save_history(history)
     git_commit_and_push()
 
+    balance = get_usdt_balance()
     msg = (
         "✅ <b>تَمَّ الشِّرَاءُ!</b>\n"
         f"المعرف: {op_id}\n"
         f"السعر: {actual_price:.2f}\n"
         f"سعر التعادل: {calc['break_even_price']:.2f}\n"
-        f"سعر البيع المطلوب: {calc['min_sell_price']:.2f}"
+        f"هدف الربح: {calc['min_sell_price']:.2f} ({PROFIT_TARGET_PERCENT}%)\n"
+        f"وقف الخسارة المتحرك: {calc['trailing_stop_price']:.2f} (2% من السعر)\n"
+        f"💳 <b>الرصيد المتبقي:</b> {balance:.2f} USDT"
     )
     send_telegram_message(msg)
 
-    print("[BUY] تَمَّ الإِنْشَاءُ: %s @ %.2f" % (op_id, actual_price))
+    print("[BUY] تَمَّ الإِنْشَاءُ: %s @ %.2f (المبلغ: %.2f USDT)" % (op_id, actual_price, amount_usd))
     return op_id
+
+def update_trailing_stop(history, current_price):
+    """تحديث وقف الخسارة المتحرك لأعلى سعر جديد"""
+    updated = False
+    open_ops = get_open_positions(history)
+    for op_id, pos in open_ops.items():
+        highest = pos.get('highest_price', pos['buy_price'])
+        if current_price > highest:
+            new_highest = current_price
+            new_stop = current_price * (1 - TRAILING_STOP_PERCENT / 100)
+            history[op_id]['highest_price'] = round(new_highest, 2)
+            history[op_id]['trailing_stop_price'] = round(new_stop, 2)
+            updated = True
+            print("[TRAILING] %s: أعلى سعر جديد %.2f، وقف جديد %.2f" % (op_id, new_highest, new_stop))
+    return updated, history
 
 def try_sell_all(history, current_price):
     open_positions = get_open_positions(history)
-
     if not open_positions:
         print("[SELL] لَا تُوجَدُ عَمَلِيَّاتٌ مَفْتُوحَةٌ لِلْبَيْعِ")
         return False, history
+
+    # تحديث وقف الخسارة المتحرك
+    updated, history = update_trailing_stop(history, current_price)
+    if updated:
+        save_history(history)
+        git_commit_and_push()
 
     print("[SELL] جَارِي فَحْصُ %d عَمَلِيَّاتٍ مَفْتُوحَةٍ..." % len(open_positions))
     sold_any = False
@@ -416,14 +549,22 @@ def try_sell_all(history, current_price):
         buy_price = pos['buy_price']
         qty = pos.get('sellable_qty', pos['qty'])
         min_sell = pos['min_sell_price']
+        trailing_stop = pos['trailing_stop_price']
         buy_cost = pos['buy_cost']
         buy_fee = pos['buy_fee_usd']
 
-        print("[SELL_CHECK] %s | شِرَاء@%.2f | الحَالِيُّ@%.2f | الهَدَفُ@%.2f" % 
-              (op_id, buy_price, current_price, min_sell))
+        print("[SELL_CHECK] %s | شِرَاء@%.2f | الحَالِيُّ@%.2f | الهَدَفُ@%.2f | الوقف@%.2f" % 
+              (op_id, buy_price, current_price, min_sell, trailing_stop))
 
+        # شرط البيع: 1) بلوغ هدف الربح  OR  2) تفعيل وقف الخسارة المتحرك
+        sell_reason = None
         if current_price >= min_sell:
-            print("[SELL] %s تَمَّ بُلُوغُ الهَدَفِ! جَارِي البَيْعُ..." % op_id)
+            sell_reason = "هدف الربح"
+        elif current_price <= trailing_stop:
+            sell_reason = "وقف الخسارة المتحرك"
+
+        if sell_reason:
+            print("[SELL] %s تَمَّ بُلُوغُ شَرْطِ البَيْعِ: %s" % (op_id, sell_reason))
 
             order, received, sell_fee, sell_price = execute_sell(qty)
 
@@ -439,18 +580,22 @@ def try_sell_all(history, current_price):
                     "sell_fee_usd": round(sell_fee, 4),
                     "profit_usd": round(actual_profit, 4),
                     "profit_percent": round((actual_profit / (buy_cost + buy_fee)) * 100, 3),
+                    "sell_reason": sell_reason,
                     "sell_date": datetime.utcnow().date().isoformat(),
                     "sell_time": datetime.utcnow().time().isoformat()
                 }
 
+                balance = get_usdt_balance()
                 msg = (
                     "💰 <b>تَمَّ البَيْعُ بِنَجَاحٍ!</b>\n"
                     f"المعرف: {op_id}\n"
                     f"الشراء: {buy_price:.2f} | البيع: {sell_price:.2f}\n"
-                    f"الربح الصافي الفعلي: {actual_profit:.4f} USDT"
+                    f"السبب: {sell_reason}\n"
+                    f"الربح الصافي الفعلي: {actual_profit:.4f} USDT\n"
+                    f"💳 <b>الرصيد المتبقي:</b> {balance:.2f} USDT"
                 )
                 send_telegram_message(msg)
-                print("[SELL] تَمَّ البَيْعُ %s بِرِبْح=%.4f" % (op_id, actual_profit))
+                print("[SELL] تَمَّ البَيْعُ %s بِرِبْح=%.4f (%s)" % (op_id, actual_profit, sell_reason))
             else:
                 print("[SELL] فَشَلَتْ عَمَلِيَّةُ بَيْعِ %s" % op_id)
         else:
@@ -459,27 +604,42 @@ def try_sell_all(history, current_price):
     return sold_any, history
 
 def can_rebuy(history, current_price):
-    last_time = get_last_buy_time(history)
+    """تحديد ما إذا كان يمكن إضافة مرحلة DCA جديدة"""
+    open_ops = get_open_positions(history)
+    num_steps = len(open_ops)
+
+    if num_steps >= len(DCA_STEPS):
+        print("[REBUY] تم الوصول إلى أقصى عدد من المراحل (%d)" % len(DCA_STEPS))
+        return False, None
+
+    # الحصول على آخر سعر شراء
     last_price = get_last_buy_price(history)
+    if last_price is None:
+        return False, None
 
-    if last_time is None or last_price is None:
-        return False
+    # النسبة المئوية للانخفاض المطلوب للمرحلة التالية
+    required_drop = DCA_STEPS[num_steps]  # سالب (مثل -1.5)
+    target_price = last_price * (1 + required_drop / 100)
 
-    elapsed = datetime.utcnow() - last_time
-    elapsed_min = elapsed.total_seconds() / 60
+    # الوقت المنقضي منذ آخر شراء
+    last_time = get_last_buy_time(history)
+    if last_time:
+        elapsed = datetime.utcnow() - last_time
+        if elapsed < timedelta(minutes=REBUY_WAIT_MINUTES):
+            print("[REBUY] انتظار %d دقائق بين المراحل (مضى %.1f)" % (REBUY_WAIT_MINUTES, elapsed.total_seconds()/60))
+            return False, None
 
-    print("[REBUY] آخِرُ شِرَاءٍ: %.2f | الحَالِيُّ: %.2f | مَرَّتْ: %.1f دَقِيقَة" % (last_price, current_price, elapsed_min))
-
-    if elapsed < timedelta(minutes=REBUY_WAIT_MINUTES):
-        print("[REBUY] لَمْ تَتَحَقَّقْ: مَرَّتْ %.1f دَقِيقَة فَقَطْ (المَطْلُوبُ %d)" % (elapsed_min, REBUY_WAIT_MINUTES))
-        return False
-
-    if current_price >= last_price:
-        print("[REBUY] لَمْ تَتَحَقَّقْ: السِّعْرُ %.2f لَيْسَ أَقَلَّ مِنْ %.2f" % (current_price, last_price))
-        return False
-
-    print("[REBUY] تَحَقَّقَتْ جَمِيعُ الشُّرُوطِ!")
-    return True
+    # التحقق من السعر
+    if current_price <= target_price:
+        # المبلغ المضاعف للمرحلة الحالية
+        amount_multiplier = DCA_MULTIPLIERS[num_steps] if num_steps < len(DCA_MULTIPLIERS) else 1.0
+        buy_amount = BUY_AMOUNT_USD * amount_multiplier
+        print("[REBUY] شراء المرحلة %d: السعر %.2f <= %.2f (انخفاض %.2f%%)، المبلغ: %.2f" % 
+              (num_steps+1, current_price, target_price, required_drop, buy_amount))
+        return True, buy_amount
+    else:
+        print("[REBUY] انتظار انخفاض إلى %.2f (حالياً %.2f)" % (target_price, current_price))
+        return False, None
 
 # ================= الدالة الرئيسية =================
 
@@ -488,8 +648,12 @@ def main():
         print("[ERROR] لَا تُوجَدُ مَفَاتِيحُ API!")
         return
 
-    print("[START] بَدْءُ تَشْغِيلِ البُوتِ...")
+    print("[START] بَدْءُ تَشْغِيلِ البُوتِ (حساب تجريبي - Binance Testnet)...")
     init_client_with_retries()
+
+    # جلب الرصيد الأولي وعرضه
+    initial_balance = get_usdt_balance()
+    send_telegram_message(f"🚀 <b>بدء تشغيل البوت التجريبي</b>\nرصيد USDT المبدئي: {initial_balance:.2f}")
 
     start_time = time.time()
     end_time = start_time + (RUN_DURATION_HOURS * 3600)
@@ -516,55 +680,43 @@ def main():
                 time.sleep(5)
                 continue
 
+            # ---- استخدام المؤشرات الفنية لتأكيد الشراء ----
+            signal, reason = get_trading_signal(current_price)
+            print("│ [SIGNAL] %s" % reason)
+
             open_count = count_open_positions(history)
             
             print("│ [خُطْوَةُ 1] فَحْصُ البَيْعِ لِلْعَمَلِيَّاتِ المَفْتُوحَةِ (%d)" % open_count)
             sold, history = try_sell_all(history, current_price)
 
             if sold:
-                print("│ [النَّتِيجَةُ] يَبِيعُ! تَمَّتْ عَمَلِيَّةُ البَيْعِ بِنَجَاحٍ.")
+                print("│ [النَّتِيجَةُ] تَمَّ البَيْعُ! حفظ التحديثات.")
                 save_history(history)
                 git_commit_and_push()
             else:
-                print("│ [النَّتِيجَةُ] لَمْ يَبِعْ → فَحْصُ إِعَادَةِ الشِّرَاءِ...")
-                if open_count < MAX_OPEN_POSITIONS:
-                    if current_price > 90.10:
-                        print("│ [تَجَاوُزٌ] السِّعْرُ الحَالِيُّ (%.2f) أَكْبَرُ مِنْ 69.70. تَمَّ إِيقَافُ الشِّرَاءِ." % current_price)
-                    else:
-                        last_sell_time = get_last_sell_time(history)
-                        wait_sell_ok = True
-                        elapsed_since_sell = 0.0
-                        
-                        if last_sell_time:
-                            elapsed_since_sell = (datetime.utcnow() - last_sell_time).total_seconds() / 60
-                            if elapsed_since_sell < 10.0:
-                                print("│ [تَجَاوُزٌ] اِنْتِظَارُ 10 دَقَائِقَ بَعْدَ البَيْعِ. (مَرَّتْ %.1f دَقِيقَة)" % elapsed_since_sell)
-                                wait_sell_ok = False
-                        
-                        if wait_sell_ok:
-                            if open_count == 0:
-                                abs_last_buy_price = get_absolute_last_buy_price(history)
-                                if abs_last_buy_price is None:
-                                    print("│ [شِرَاءٌ] لَا تُوجَدُ أَيُّ صَفَقَاتٍ فِي السِّجِلِّ! شِرَاءٌ فَوْرِيٌّ...")
-                                    create_buy_operation()
-                                else:
-                                    # التعديل الجديد: تفريغ الذاكرة الزمنية بعد مرور 60 دقيقة (ساعة واحدة)
-                                    if elapsed_since_sell >= 60.0:
-                                        print("│ [شِرَاءٌ] مَرَّتْ سَاعَةٌ كَامِلَةٌ بِدُونِ صَفَقَاتٍ مَفْتُوحَةٍ (تَفْرِيغُ الذَّاكِرَةِ). تَجَاهُلُ آخِرِ سِعْرٍ (%.2f) وَالشِّرَاءُ الحَالِيُّ (%.2f)..." % (abs_last_buy_price, current_price))
-                                        create_buy_operation()
-                                    elif current_price <= abs_last_buy_price:
-                                        print("│ [شِرَاءٌ] مَرَّتْ 10 دَقَائِقَ، وَالسِّعْرُ (%.2f) <= آخِرِ شِرَاءٍ (%.2f). جَارِي الشِّرَاءُ..." % (current_price, abs_last_buy_price))
-                                        create_buy_operation()
-                                    else:
-                                        minutes_left = 60.0 - elapsed_since_sell
-                                        print("│ [تَجَاوُزٌ] السِّعْرُ (%.2f) أَكْبَرُ مِنْ آخِرِ شِرَاءٍ (%.2f). نَنْتَظِرُ اِنْخِفَاضَهُ أَوْ مُرُورَ (%.1f) دَقِيقَة لِنِسْيَانِ السِّعْرِ..." % (current_price, abs_last_buy_price, minutes_left))
-                            elif can_rebuy(history, current_price):
-                                print("│ [شِرَاءٌ] يَشْتَرِي! الشُّرُوطُ مُطَابِقَةٌ...")
-                                create_buy_operation()
+                print("│ [النَّتِيجَةُ] لَمْ يَبِعْ → فَحْصُ إِمْكَانِيَّةِ الشِّرَاءِ...")
+                
+                # التحقق من وجود صفقات مفتوحة أقل من الحد الأقصى
+                if open_count < len(DCA_STEPS):
+                    # التحقق من الإشارة الفنية قبل الشراء
+                    if signal == 'buy' or open_count == 0:
+                        # إذا كانت الإشارة شراء أو لا توجد صفقات (شراء أولي)
+                        if open_count == 0:
+                            # شراء أولي (بدون انتظار انخفاض)
+                            print("│ [شِرَاءٌ] لا توجد صفقات، شراء أولي...")
+                            create_buy_operation(BUY_AMOUNT_USD)
+                        else:
+                            # محاولة إضافة مرحلة DCA
+                            can_buy, amount = can_rebuy(history, current_price)
+                            if can_buy and amount is not None:
+                                print("│ [شِرَاءٌ] إضافة مرحلة DCA...")
+                                create_buy_operation(amount)
                             else:
-                                print("│ [تَجَاوُزٌ] شُرُوطُ الشِّرَاءِ لَمْ تَتَحَقَّقْ بَعْدُ.")
+                                print("│ [تَجَاوُزٌ] شُرُوطُ إِضَافَةِ مَرْحَلَةٍ لَمْ تَتَحَقَّقْ.")
+                    else:
+                        print("│ [تَجَاوُزٌ] الإشارة الفنية ليست شراء (انتظار).")
                 else:
-                    print("│ [تَحْذِيرٌ] تَمَّ بُلُوغُ الحَدِّ الأَقْصَى لِلصَّفَقَاتِ (%d)." % MAX_OPEN_POSITIONS)
+                    print("│ [تَحْذِيرٌ] تَمَّ بُلُوغُ الحَدِّ الأَقْصَى لِلصَّفَقَاتِ (%d)." % len(DCA_STEPS))
 
             print("└─────────────────────────────────────┘")
 
@@ -579,6 +731,8 @@ def main():
         time.sleep(sleep_time)
 
     print("[END] تَمَّ الاِنْتِهَاءُ مِنَ الدَّوْرَةِ زَمَنِيًّا!")
+    final_balance = get_usdt_balance()
+    send_telegram_message(f"⏹️ <b>إيقاف البوت التجريبي</b>\nالرصيد النهائي: {final_balance:.2f} USDT")
 
 if __name__ == "__main__":
     main()
