@@ -20,7 +20,7 @@
     },
     "buy_f99f6035": {
         "type": "buy",
-        "status": "معلقة - جاري الانتظار",
+        "status": "تم البيع",
         "date": "2026-07-29",
         "time": "13:11:04.672744",
         "buy_time": "2026-07-29T13:11:04.672744",
@@ -35,6 +35,16 @@
         "min_sell_price": 70.92,
         "trailing_stop_price": 72.07,
         "highest_price": 73.54,
-        "sell_details": {}
+        "sell_details": {
+            "sell_id": "sell_f0e5dd2b",
+            "sell_price": 73.54,
+            "received_usd": 7.7217,
+            "sell_fee_usd": 0.0077,
+            "profit_usd": 0.2633,
+            "profit_percent": 3.534,
+            "sell_reason": "هدف الربح",
+            "sell_date": "2026-07-29",
+            "sell_time": "13:11:19.840362"
+        }
     }
 }
