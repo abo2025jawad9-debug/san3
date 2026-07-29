@@ -1,1 +1,21 @@
-
+{
+    "buy_c8795fba": {
+        "type": "buy",
+        "status": "معلقة - جاري الانتظار",
+        "date": "2026-07-29",
+        "time": "02:53:03.692913",
+        "buy_time": "2026-07-29T02:53:03.692913",
+        "buy_price": 73.69,
+        "qty": 0.067,
+        "sellable_qty": 0.066933,
+        "buy_amount_usd": 5.0,
+        "buy_fee_usd": 0.0049,
+        "buy_cost": 4.9372,
+        "total_cost": 4.9471,
+        "break_even_price": 73.84,
+        "min_sell_price": 74.58,
+        "trailing_stop_price": 72.22,
+        "highest_price": 73.69,
+        "sell_details": {}
+    }
+}
