@@ -1,2 +1,2 @@
-python-binance
+pybit
 requests
