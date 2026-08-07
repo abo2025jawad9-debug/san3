@@ -7,19 +7,18 @@ import subprocess
 import concurrent.futures
 from datetime import datetime, timedelta
 from dataclasses import dataclass
-from binance.client import Client
-from binance.exceptions import BinanceAPIException
+from pybit.unified_trading import HTTP
 
 # ==========================================
-# CONFIGURATION
+# CONFIGURATION (الإعدادات)
 # ==========================================
 
 @dataclass
 class Config:
-    api_key: str = 'dmyc2X0llvZ1A1zGAy9wfkqJHqZC20Uv04iYwBmOrnBMLJlnH7SZOsPt4eYGYnoJ'
-    secret: str = 'uVax1wfQo0Ns1XIhGgsW4j2yjgB9VPlQWYzWvt1sAeg640WpGRCSqFMPvVyNtu6S'
-    telegram_token: str = '8777604170:AAGVQWj7KtRZWKjZQ0BuyIZCHJ3FCmFgQP4'
-    telegram_chat_id: str = '6390985342'
+    api_key: str = os.getenv('BYBIT_API_KEY')
+    secret: str = os.getenv('BYBIT_API_SECRET')
+    telegram_token: str = os.getenv('TELEGRAM_TOKEN')
+    telegram_chat_id: str = os.getenv('TELEGRAM_CHAT_ID')
 
 cfg = Config()
 
@@ -28,34 +27,31 @@ API_SECRET = cfg.secret
 TELEGRAM_TOKEN = cfg.telegram_token
 TELEGRAM_CHAT_ID = cfg.telegram_chat_id
 
-SYMBOL = 'SOLUSDT'
+SYMBOL = "AAVEUSDT"
+BUY_AMOUNT_USD = 14.3
+TAKER_FEE_PERCENT = 0.001
+MIN_PROFIT_USD = 0.05  
 
-# ===== استراتيجية DCA متعددة المراحل =====
-BUY_AMOUNT_USD = 5.0          # المبلغ الأساسي لكل شراء
-DCA_STEPS = [0.0, -1.5, -3.0] # نسب الانخفاض عن آخر سعر شراء (بالنسبة المئوية)
-DCA_MULTIPLIERS = [1.0, 1.5, 2.0] # مضاعفات المبلغ لكل مرحلة
+# [تعديلات الاستراتيجية الجديدة - الأمر المعلق الذكي]
+# النسبة المئوية المسموح بها فوق أدنى سعر (قاع) لآخر 24 ساعة.
+# قيمة (1.5) تعني: البوت لن يشتري إلا إذا كان السعر الحالي لا يرتفع بأكثر من 1.5% عن قاع اليوم.
+# يمكنك تقليلها إلى (1.0) ليكون البوت أكثر صرامة، أو رفعها إذا أردت تسريع الشراء.
+BUY_NEAR_24H_LOW_PCT = 0.5 
 
-# ===== إعدادات البيع =====
-PROFIT_TARGET_PERCENT = 0.8   # هدف الربح الديناميكي (0.8%)
-TRAILING_STOP_PERCENT = 2.0   # وقف الخسارة المتحرك (2% من أعلى سعر)
-MIN_PROFIT_USD = 0.05
-
-# ===== إعدادات المؤشرات (بدون numpy) =====
-SMA_PERIOD = 20
-RSI_PERIOD = 14
-RSI_OVERSOLD = 40
-
-# ===== إعدادات عامة =====
+# الفارق السعري المطلوب بين كل صفقة والتي تليها (بالدولار)
+PRICE_STEP_USD = 0.3
+    
 JSON_FILE = 'sh.json'
-MAX_OPEN_POSITIONS = 3         # عدد مراحل الشراء (يتوافق مع عدد DCA_STEPS)
-REBUY_WAIT_MINUTES = 5
-SLEEP_SECONDS = 2
-RUN_DURATION_HOURS = 6
+MAX_OPEN_POSITIONS = 1
+REBUY_WAIT_MINUTES = 1
+SLEEP_SECONDS = 7
+RUN_DURATION_HOURS = 5.8 
 
 PROXY_LIST = []
 client = None
 
-# ================= بروكسيات (نفس الآلية) =================
+# ================= بروكسيات =================
+# [تم الاحتفاظ بدوال البروكسي كما هي لضمان عمل البوت على الخوادم]
 
 def fetch_free_proxies():
     proxies = []
@@ -88,7 +84,7 @@ def test_proxy(proxy_url):
     try:
         proxies = {"http": proxy_url, "https": proxy_url}
         start = time.time()
-        response = requests.get("https://testnet.binance.vision/api/v3/ping", proxies=proxies, timeout=3)
+        response = requests.get("https://api.bybit.com/v5/market/time", proxies=proxies, timeout=3)
         if response.status_code == 200:
             latency = time.time() - start
             return latency
@@ -130,39 +126,46 @@ def init_client_with_retries():
 
     while True:
         for attempt in range(1, 4):
-            print("[INIT] مُحَاوَلَةُ الاِتِّصَالِ %d/3 بـ Binance Testnet..." % attempt)
+            print("[INIT] مُحَاوَلَةُ الاِتِّصَالِ %d/3 بـ Bybit..." % attempt)
             proxy = get_best_proxy()
             if proxy is None:
                 time.sleep(3)
                 continue
 
             try:
-                client = Client(API_KEY, API_SECRET, testnet=True, requests_params={"proxies": proxy})
-                client.get_account()
-                print("[INIT] تَمَّ الاِتِّصَالُ بـ Testnet! البُرُوكْسِي: %s" % proxy['http'])
+                os.environ['HTTP_PROXY'] = proxy['http']
+                os.environ['HTTPS_PROXY'] = proxy['https']
+
+                client = HTTP(
+                    testnet=False,
+                    api_key=API_KEY,
+                    api_secret=API_SECRET
+                )
+                
+                client.get_wallet_balance(accountType="UNIFIED", coin="USDT")
+                print("[INIT] تَمَّ الاِتِّصَالُ بِنَجَاحٍ! البُرُوكْسِي: %s" % proxy['http'])
                 return True
-            except BinanceAPIException as e:
-                print("[INIT] تَمَّ رَفْضُ البُرُوكْسِي: %s" % e)
-                if proxy['http'] in PROXY_LIST:
-                    PROXY_LIST.remove(proxy['http'])
             except Exception as e:
-                print("[INIT] خَطَأٌ: %s" % e)
+                print("[INIT] تَمَّ رَفْضُ البُرُوكْسِي أَوْ حَدَثَ خَطَأٌ: %s" % e)
                 if proxy['http'] in PROXY_LIST:
                     PROXY_LIST.remove(proxy['http'])
+                
+                os.environ.pop('HTTP_PROXY', None)
+                os.environ.pop('HTTPS_PROXY', None)
+            
             time.sleep(2)
 
         print("[INIT] فَشِلَتْ 3 مُحَاوَلَاتٍ. جَارِي إِعَادَةُ جَلْبِ البُرُوكْسِي...")
         PROXY_LIST = []
         time.sleep(5)
 
-# ================= تليجرام (مع Testnet) =================
+# ================= تليجرام وإدارة الملفات =================
 
 def send_telegram_message(message):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         return False
-    full_message = "🧪 <b>حساب تجريبي - Binance Testnet</b>\n" + message
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": full_message, "parse_mode": "HTML"}
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"}
     for attempt in range(1, 4):
         try:
             response = requests.post(url, json=payload, timeout=10)
@@ -172,8 +175,6 @@ def send_telegram_message(message):
             pass
         time.sleep(2)
     return False
-
-# ================= إدارة الملفات =================
 
 def load_history():
     if os.path.exists(JSON_FILE):
@@ -204,72 +205,16 @@ def git_commit_and_push():
             time.sleep(2)
     return False
 
-# ================= المؤشرات الفنية (بدون numpy) =================
-
-def get_klines(limit=50):
-    try:
-        klines = client.get_klines(symbol=SYMBOL, interval=Client.KLINE_INTERVAL_15MINUTE, limit=limit)
-        closes = [float(k[4]) for k in klines]
-        volumes = [float(k[5]) for k in klines]
-        return closes, volumes
-    except Exception as e:
-        print("[INDICATOR] فَشَلَ جَلْبُ الشَّمُوعِ: %s" % e)
-        return None, None
-
-def calculate_sma(closes, period=SMA_PERIOD):
-    if len(closes) < period:
-        return None
-    return sum(closes[-period:]) / period
-
-def calculate_rsi(closes, period=RSI_PERIOD):
-    if len(closes) < period + 1:
-        return None
-    deltas = [closes[i] - closes[i-1] for i in range(1, len(closes))]
-    gains = [d if d > 0 else 0 for d in deltas]
-    losses = [-d if d < 0 else 0 for d in deltas]
-    avg_gain = sum(gains[-period:]) / period
-    avg_loss = sum(losses[-period:]) / period
-    if avg_loss == 0:
-        return 100
-    rs = avg_gain / avg_loss
-    return 100 - (100 / (1 + rs))
-
-def get_trading_signal(current_price):
-    closes, volumes = get_klines(50)
-    if closes is None:
-        return 'wait', "فشل جلب البيانات"
-
-    sma = calculate_sma(closes)
-    rsi = calculate_rsi(closes)
-
-    avg_volume = sum(volumes[-10:]) / 10 if len(volumes) >= 10 else 0
-    current_volume = volumes[-1] if volumes else 0
-
-    buy_signals = []
-    if sma is not None and current_price < sma:
-        buy_signals.append(f"SMA ({sma:.2f})")
-    if rsi is not None and rsi < RSI_OVERSOLD:
-        buy_signals.append(f"RSI ({rsi:.1f})")
-    if current_volume > avg_volume * 0.8:
-        buy_signals.append(f"Volume ({current_volume:.0f} > {avg_volume*0.8:.0f})")
-
-    if len(buy_signals) >= 2:
-        return 'buy', f"إشارة شراء: {', '.join(buy_signals)}"
-    else:
-        return 'wait', f"انتظار: SMA={sma:.2f if sma else 'None'}, RSI={rsi:.1f if rsi else 'None'}"
-
 # ================= حسابات =================
 
 def calculate_sell_thresholds(buy_price, qty, buy_fee_usd):
     buy_cost = buy_price * qty
-    estimated_sell_fee = buy_cost * 0.001  # 0.1%
+    estimated_sell_fee = buy_cost * TAKER_FEE_PERCENT
     total_fees = buy_fee_usd + estimated_sell_fee
     total_cost = buy_cost + total_fees
-
-    profit_target = buy_cost * (PROFIT_TARGET_PERCENT / 100)
-    min_profit_price = (total_cost + max(profit_target, MIN_PROFIT_USD)) / qty
+    
     break_even = total_cost / qty
-    trailing_stop_price = buy_price * (1 - TRAILING_STOP_PERCENT / 100)
+    min_profit_price = (total_cost + MIN_PROFIT_USD) / qty
 
     return {
         "buy_cost": buy_cost,
@@ -278,66 +223,72 @@ def calculate_sell_thresholds(buy_price, qty, buy_fee_usd):
         "total_fees": total_fees,
         "total_cost": total_cost,
         "break_even_price": break_even,
-        "min_sell_price": min_profit_price,
-        "trailing_stop_price": trailing_stop_price
+        "min_sell_price": min_profit_price
     }
 
-# ================= عمليات السوق (Binance Testnet) =================
+# ================= عمليات السوق =================
 
-def get_current_price():
+def get_market_data():
+    """
+    [تعديل]: دالة جديدة تجلب السعر الحالي بالإضافة إلى أدنى سعر في آخر 24 ساعة
+    """
     try:
-        ticker = float(client.get_symbol_ticker(symbol=SYMBOL)['price'])
-        print("[PRICE] السِّعْرُ الحَالِيُّ: %.2f" % ticker)
-        return ticker
+        res = client.get_tickers(category="spot", symbol=SYMBOL)
+        ticker = float(res['result']['list'][0]['lastPrice'])
+        low_24h = float(res['result']['list'][0]['lowPrice24h'])
+        print("[PRICE] السِّعْرُ الحَالِيُّ: %.2f | قَاعُ 24 سَاعَة: %.2f" % (ticker, low_24h))
+        return ticker, low_24h
     except Exception as e:
-        print("[PRICE] فَشَلٌ فِي جَلْبِ السِّعْرِ: %s" % e)
-        return None
+        print("[PRICE] فَشَلٌ فِي جَلْبِ البَيَانَاتِ: %s" % e)
+        return None, None
 
 def get_usdt_balance():
     try:
-        account = client.get_account()
-        for asset in account['balances']:
-            if asset['asset'] == 'USDT':
-                return float(asset['free'])
-        return 0.0
+        res = client.get_wallet_balance(accountType="UNIFIED", coin="USDT")
+        balance = float(res['result']['list'][0]['coin'][0]['walletBalance'])
+        return balance
     except Exception as e:
-        print("[BALANCE] فَشَلَ جَلْبُ الرَّصِيدِ: %s" % e)
-        return 0.0
+        try:
+            res = client.get_wallet_balance(accountType="SPOT", coin="USDT")
+            balance = float(res['result']['list'][0]['coin'][0]['walletBalance'])
+            return balance
+        except Exception:
+            return 0.0
 
-def execute_buy(amount_usd=None):
-    if amount_usd is None:
-        amount_usd = BUY_AMOUNT_USD
-
+def execute_buy():
     for attempt in range(1, 4):
         try:
-            current_price = float(client.get_symbol_ticker(symbol=SYMBOL)['price'])
-            order = client.order_market_buy(symbol=SYMBOL, quoteOrderQty=amount_usd)
-
-            fills = order.get('fills', [])
+            current_price, _ = get_market_data()
+            order = client.place_order(
+                category="spot",
+                symbol=SYMBOL,
+                side="Buy",
+                orderType="Market",
+                qty=str(BUY_AMOUNT_USD),
+                marketUnit="quoteCoin"
+            )
+            
+            order_id = order['result']['orderId']
+            time.sleep(1.5) 
+            
+            exec_res = client.get_executions(category="spot", orderId=order_id)
+            fills = exec_res['result']['list']
+            
             total_fee_usd = 0.0
             total_qty = 0.0
             total_cost = 0.0
             asset_fee = 0.0
 
             for fill in fills:
-                fee = float(fill['commission'])
-                fee_asset = fill['commissionAsset']
-                qty = float(fill['qty'])
-                price = float(fill['price'])
+                fee = float(fill['execFee'])
+                qty = float(fill['execQty'])
+                price = float(fill['execPrice'])
+                
                 total_qty += qty
                 total_cost += qty * price
-
-                if fee_asset == 'USDT':
-                    total_fee_usd += fee
-                elif fee_asset == SYMBOL.replace('USDT', ''):
-                    total_fee_usd += fee * current_price
-                    asset_fee += fee
-                elif fee_asset == 'BNB':
-                    try:
-                        bnb_price = float(client.get_symbol_ticker(symbol='BNBUSDT')['price'])
-                        total_fee_usd += fee * bnb_price
-                    except:
-                        pass
+                
+                asset_fee += fee
+                total_fee_usd += fee * price
 
             actual_price = total_cost / total_qty if total_qty > 0 else current_price
             sellable_qty = total_qty - asset_fee
@@ -354,37 +305,42 @@ def execute_buy(amount_usd=None):
 def execute_sell(qty):
     for attempt in range(1, 4):
         try:
-            info = client.get_symbol_info(SYMBOL)
-            step = float([f for f in info['filters'] if f['filterType'] == 'LOT_SIZE'][0]['stepSize'])
-            prec = len(str(step).split('.')[-1].rstrip('0')) if '.' in str(step) else 0
+            info = client.get_instruments_info(category="spot", symbol=SYMBOL)
+            step_str = info['result']['list'][0]['lotSizeFilter']['basePrecision']
+            step = float(step_str)
+            prec = len(step_str.split('.')[-1].rstrip('0')) if '.' in step_str else 0
+            
             qty = round(qty - (qty % step), prec)
 
             if qty <= 0:
                 print("[SELL] الكَمِّيَّةُ صِفْرٌ بَعْدَ التَّقْرِيبِ")
                 return None, 0, 0, 0
 
-            order = client.order_market_sell(symbol=SYMBOL, quantity=qty)
-            fills = order.get('fills', [])
+            order = client.place_order(
+                category="spot",
+                symbol=SYMBOL,
+                side="Sell",
+                orderType="Market",
+                qty=str(qty),
+                marketUnit="baseCoin"
+            )
+            
+            order_id = order['result']['orderId']
+            time.sleep(1.5)
+            
+            exec_res = client.get_executions(category="spot", orderId=order_id)
+            fills = exec_res['result']['list']
+            
             total_fee = 0.0
             total_received = 0.0
 
             for fill in fills:
-                fee = float(fill['commission'])
-                fee_asset = fill['commissionAsset']
-                qty_f = float(fill['qty'])
-                price = float(fill['price'])
+                fee = float(fill['execFee'])
+                qty_f = float(fill['execQty'])
+                price = float(fill['execPrice'])
+                
                 total_received += qty_f * price
-
-                if fee_asset == 'USDT':
-                    total_fee += fee
-                elif fee_asset == SYMBOL.replace('USDT', ''):
-                    total_fee += fee * price
-                elif fee_asset == 'BNB':
-                    try:
-                        bnb_price = float(client.get_symbol_ticker(symbol='BNBUSDT')['price'])
-                        total_fee += fee * bnb_price
-                    except:
-                        pass
+                total_fee += fee
 
             actual_price = total_received / qty if qty > 0 else 0
             return order, total_received, total_fee, actual_price
@@ -395,7 +351,7 @@ def execute_sell(qty):
 
     return None, 0, 0, 0
 
-# ================= منطق التداول الرئيسي (DCA + Trailing Stop) =================
+# ================= منطق التداول الرئيسي =================
 
 def count_open_positions(history):
     return sum(1 for op in history.values() if isinstance(op, dict) and op.get('status') == "معلقة - جاري الانتظار")
@@ -418,6 +374,19 @@ def get_last_buy_time(history):
     times = [datetime.fromisoformat(op['buy_time']) for op in open_ops.values() if op.get('buy_time')]
     return max(times) if times else None
 
+def get_last_sell_time(history):
+    sell_times = []
+    for op in history.values():
+        if isinstance(op, dict) and op.get('status') == "تم البيع" and 'sell_details' in op:
+            sd = op['sell_details']
+            if 'sell_date' in sd and 'sell_time' in sd:
+                try:
+                    dt_str = f"{sd['sell_date']}T{sd['sell_time']}"
+                    sell_times.append(datetime.fromisoformat(dt_str))
+                except:
+                    pass
+    return max(sell_times) if sell_times else None
+
 def get_absolute_last_buy_price(history):
     times = []
     for op in history.values():
@@ -428,11 +397,8 @@ def get_absolute_last_buy_price(history):
     times.sort(key=lambda x: x[0])
     return times[-1][1]
 
-def create_buy_operation(amount_usd=None):
-    if amount_usd is None:
-        amount_usd = BUY_AMOUNT_USD
-
-    order, fee, qty, actual_price, total_cost, sellable_qty = execute_buy(amount_usd)
+def create_buy_operation():
+    order, fee, qty, actual_price, total_cost, sellable_qty = execute_buy()
 
     if order is None or qty <= 0:
         print("[BUY] فَشَلَ إِنْشَاءُ عَمَلِيَّةِ الشِّرَاءِ")
@@ -451,14 +417,12 @@ def create_buy_operation(amount_usd=None):
         "buy_price": round(actual_price, 2),
         "qty": round(qty, 8),
         "sellable_qty": round(sellable_qty, 8),
-        "buy_amount_usd": round(amount_usd, 2),
+        "buy_amount_usd": BUY_AMOUNT_USD,
         "buy_fee_usd": round(fee, 4),
         "buy_cost": round(calc['buy_cost'], 4),
         "total_cost": round(calc['total_cost'], 4),
         "break_even_price": round(calc['break_even_price'], 2),
         "min_sell_price": round(calc['min_sell_price'], 2),
-        "trailing_stop_price": round(calc['trailing_stop_price'], 2),
-        "highest_price": round(actual_price, 2),
         "sell_details": {}
     }
 
@@ -468,64 +432,49 @@ def create_buy_operation(amount_usd=None):
     git_commit_and_push()
 
     balance = get_usdt_balance()
+
     msg = (
-        "✅ <b>تَمَّ الشِّرَاءُ على Testnet!</b>\n"
+        "✅ <b>تَمَّ الشِّرَاءُ بنجاح!</b>\n"
         f"المعرف: {op_id}\n"
         f"السعر: {actual_price:.2f}\n"
         f"سعر التعادل: {calc['break_even_price']:.2f}\n"
-        f"هدف الربح: {calc['min_sell_price']:.2f} ({PROFIT_TARGET_PERCENT}%)\n"
-        f"وقف الخسارة المتحرك: {calc['trailing_stop_price']:.2f} (2%)\n"
-        f"💳 <b>الرصيد المتبقي:</b> {balance:.2f} USDT"
+        f"سعر البيع المطلوب: {calc['min_sell_price']:.2f}\n"
+        f"💳 <b>الرصيد المتاح:</b> {balance:.2f} USDT"
     )
     send_telegram_message(msg)
 
-    print("[BUY] تَمَّ الإِنْشَاءُ: %s @ %.2f (المبلغ: %.2f)" % (op_id, actual_price, amount_usd))
+    print("[BUY] تَمَّ الإِنْشَاءُ: %s @ %.2f" % (op_id, actual_price))
     return op_id
-
-def update_trailing_stop(history, current_price):
-    updated = False
-    open_ops = get_open_positions(history)
-    for op_id, pos in open_ops.items():
-        highest = pos.get('highest_price', pos['buy_price'])
-        if current_price > highest:
-            new_highest = current_price
-            new_stop = current_price * (1 - TRAILING_STOP_PERCENT / 100)
-            history[op_id]['highest_price'] = round(new_highest, 2)
-            history[op_id]['trailing_stop_price'] = round(new_stop, 2)
-            updated = True
-            print("[TRAILING] %s: أعلى سعر %.2f، وقف %.2f" % (op_id, new_highest, new_stop))
-    return updated, history
 
 def try_sell_all(history, current_price):
     open_positions = get_open_positions(history)
+
     if not open_positions:
+        print("[SELL] لَا تُوجَدُ عَمَلِيَّاتٌ مَفْتُوحَةٌ لِلْبَيْعِ")
         return False, history
 
-    updated, history = update_trailing_stop(history, current_price)
-    if updated:
-        save_history(history)
-        git_commit_and_push()
-
+    print("[SELL] جَارِي فَحْصُ %d عَمَلِيَّاتٍ مَفْتُوحَةٍ..." % len(open_positions))
     sold_any = False
+
     for op_id, pos in open_positions.items():
         buy_price = pos['buy_price']
         qty = pos.get('sellable_qty', pos['qty'])
         min_sell = pos['min_sell_price']
-        trailing_stop = pos['trailing_stop_price']
         buy_cost = pos['buy_cost']
         buy_fee = pos['buy_fee_usd']
 
-        sell_reason = None
-        if current_price >= min_sell:
-            sell_reason = "هدف الربح"
-        elif current_price <= trailing_stop:
-            sell_reason = "وقف الخسارة المتحرك"
+        print("[SELL_CHECK] %s | شِرَاء@%.2f | الحَالِيُّ@%.2f | الهَدَفُ@%.2f" % 
+              (op_id, buy_price, current_price, min_sell))
 
-        if sell_reason:
+        if current_price >= min_sell:
+            print("[SELL] %s تَمَّ بُلُوغُ الهَدَفِ! جَارِي البَيْعُ..." % op_id)
+
             order, received, sell_fee, sell_price = execute_sell(qty)
+
             if order:
                 actual_profit = received - buy_cost - buy_fee - sell_fee
                 sold_any = True
+
                 history[op_id]['status'] = "تم البيع"
                 history[op_id]['sell_details'] = {
                     "sell_id": f"sell_{uuid.uuid4().hex[:8]}",
@@ -534,48 +483,45 @@ def try_sell_all(history, current_price):
                     "sell_fee_usd": round(sell_fee, 4),
                     "profit_usd": round(actual_profit, 4),
                     "profit_percent": round((actual_profit / (buy_cost + buy_fee)) * 100, 3),
-                    "sell_reason": sell_reason,
                     "sell_date": datetime.utcnow().date().isoformat(),
                     "sell_time": datetime.utcnow().time().isoformat()
                 }
+
                 balance = get_usdt_balance()
+
                 msg = (
-                    "💰 <b>تَمَّ البَيْعُ على Testnet!</b>\n"
+                    "💰 <b>تَمَّ البَيْعُ بِنَجَاحٍ!</b>\n"
                     f"المعرف: {op_id}\n"
                     f"الشراء: {buy_price:.2f} | البيع: {sell_price:.2f}\n"
-                    f"السبب: {sell_reason}\n"
-                    f"الربح: {actual_profit:.4f} USDT\n"
-                    f"💳 <b>الرصيد:</b> {balance:.2f} USDT"
+                    f"الربح الصافي الفعلي: {actual_profit:.4f} USDT\n"
+                    f"💳 <b>الرصيد المتاح:</b> {balance:.2f} USDT"
                 )
                 send_telegram_message(msg)
-                print("[SELL] %s ربح=%.4f (%s)" % (op_id, actual_profit, sell_reason))
+                print("[SELL] تَمَّ البَيْعُ %s بِرِبْح=%.4f" % (op_id, actual_profit))
+            else:
+                print("[SELL] فَشَلَتْ عَمَلِيَّةُ بَيْعِ %s" % op_id)
+        else:
+            print("[SELL_CHECK] %s لَمْ يَحِنِ الوَقْتُ بَعْدُ" % op_id)
 
     return sold_any, history
 
 def can_rebuy(history, current_price):
-    open_ops = get_open_positions(history)
-    num_steps = len(open_ops)
-
-    if num_steps >= len(DCA_STEPS):
-        return False, None
-
-    last_price = get_last_buy_price(history)
-    if last_price is None:
-        return False, None
-
-    required_drop = DCA_STEPS[num_steps]
-    target_price = last_price * (1 + required_drop / 100)
-
     last_time = get_last_buy_time(history)
-    if last_time:
-        elapsed = datetime.utcnow() - last_time
-        if elapsed < timedelta(minutes=REBUY_WAIT_MINUTES):
-            return False, None
+    last_price = get_last_buy_price(history)
 
-    if current_price <= target_price:
-        amount_multiplier = DCA_MULTIPLIERS[num_steps] if num_steps < len(DCA_MULTIPLIERS) else 1.0
-        return True, BUY_AMOUNT_USD * amount_multiplier
-    return False, None
+    if last_time is None or last_price is None:
+        return False
+
+    elapsed = datetime.utcnow() - last_time
+    elapsed_min = elapsed.total_seconds() / 60
+
+    if elapsed < timedelta(minutes=REBUY_WAIT_MINUTES):
+        return False
+
+    if current_price > (last_price - PRICE_STEP_USD):
+        return False
+
+    return True
 
 # ================= الدالة الرئيسية =================
 
@@ -584,11 +530,8 @@ def main():
         print("[ERROR] لَا تُوجَدُ مَفَاتِيحُ API!")
         return
 
-    print("[START] بَدْءُ تَشْغِيلِ البُوتِ على Binance Testnet...")
+    print("[START] بَدْءُ تَشْغِيلِ البُوتِ...")
     init_client_with_retries()
-
-    initial_balance = get_usdt_balance()
-    send_telegram_message(f"🚀 <b>بدء تشغيل البوت التجريبي</b>\nرصيد USDT المبدئي: {initial_balance:.2f}")
 
     start_time = time.time()
     end_time = start_time + (RUN_DURATION_HOURS * 3600)
@@ -609,15 +552,12 @@ def main():
             
             print("\n┌─────────────────────────────────────┐")
             
-            current_price = get_current_price()
-            if current_price is None:
+            # [تعديل] جلب السعر الحالي وقاع 24 ساعة في نفس الوقت
+            current_price, low_24h = get_market_data()
+            if current_price is None or low_24h is None:
                 print("│ [LOOP] فَشَلٌ فِي جَلْبِ السِّعْرِ، جَارِي الإِعَادَةُ...")
                 time.sleep(5)
                 continue
-
-            # ---- استخدام المؤشرات الفنية لتأكيد الشراء ----
-            signal, reason = get_trading_signal(current_price)
-            print("│ [SIGNAL] %s" % reason)
 
             open_count = count_open_positions(history)
             
@@ -625,26 +565,63 @@ def main():
             sold, history = try_sell_all(history, current_price)
 
             if sold:
-                print("│ [النَّتِيجَةُ] تَمَّ البَيْعُ! حفظ التحديثات.")
+                print("│ [النَّتِيجَةُ] يَبِيعُ! تَمَّتْ عَمَلِيَّةُ البَيْعِ بِنَجَاحٍ.")
                 save_history(history)
                 git_commit_and_push()
             else:
-                print("│ [النَّتِيجَةُ] لَمْ يَبِعْ → فَحْصُ إِمْكَانِيَّةِ الشِّرَاءِ...")
-                
+                print("│ [النَّتِيجَةُ] لَمْ يَبِعْ → فَحْصُ إِعَادَةِ الشِّرَاءِ...")
                 if open_count < MAX_OPEN_POSITIONS:
-                    if signal == 'buy' or open_count == 0:
+                    
+                    # [الاستراتيجية الجديدة] حساب منطقة الشراء الآمنة (الأمر المعلق)
+                    limit_buy_target = low_24h * (1 + (BUY_NEAR_24H_LOW_PCT / 100))
+                    is_price_in_buy_zone = (current_price <= limit_buy_target)
+                    
+                    print("│ [إِسْتِرَاتِيجِيَّة] هَدَفُ الشِّرَاءِ المُعَلَّقِ: <= %.2f (السِّعْرُ الحَالِيُّ: %.2f)" % (limit_buy_target, current_price))
+
+                    last_sell_time = get_last_sell_time(history)
+                    wait_sell_ok = True
+                    elapsed_since_sell = 0.0
+                    
+                    if last_sell_time:
+                        elapsed_since_sell = (datetime.utcnow() - last_sell_time).total_seconds() / 60
+                        if elapsed_since_sell < 10.0:
+                            print("│ [تَجَاوُزٌ] اِنْتِظَارُ 10 دَقَائِقَ بَعْدَ البَيْعِ. (مَرَّتْ %.1f دَقِيقَة)" % elapsed_since_sell)
+                            wait_sell_ok = False
+                    
+                    if wait_sell_ok:
                         if open_count == 0:
-                            print("│ [شِرَاءٌ] لا توجد صفقات، شراء أولي...")
-                            create_buy_operation(BUY_AMOUNT_USD)
-                        else:
-                            can_buy, amount = can_rebuy(history, current_price)
-                            if can_buy and amount is not None:
-                                print("│ [شِرَاءٌ] إضافة مرحلة DCA...")
-                                create_buy_operation(amount)
+                            abs_last_buy_price = get_absolute_last_buy_price(history)
+                            if abs_last_buy_price is None:
+                                # حالة بدء البوت لأول مرة بدون تاريخ
+                                if is_price_in_buy_zone:
+                                    print("│ [شِرَاءٌ] السِّعْرُ هَبَطَ لِمِنْطَقَةِ القَاعِ! جَارِي التَّنْفِيذُ فَوْراً...")
+                                    create_buy_operation()
+                                else:
+                                    print("│ [تَجَاوُزٌ] السِّعْرُ مُرْتَفِعٌ. نَنْتَظِرُ هُبُوطَهُ لِمِنْطَقَةِ الشِّرَاءِ الآمِنَةِ.")
                             else:
-                                print("│ [تَجَاوُزٌ] شُرُوطُ إِضَافَةِ مَرْحَلَةٍ لَمْ تَتَحَقَّقْ.")
-                    else:
-                        print("│ [تَجَاوُزٌ] الإشارة الفنية ليست شراء (انتظار).")
+                                if elapsed_since_sell >= 60.0:
+                                    if is_price_in_buy_zone:
+                                        print("│ [شِرَاءٌ] مَرَّتْ سَاعَةٌ كَامِلَةٌ وَالسِّعْرُ فِي القَاعِ. جَارِي الشِّرَاءُ...")
+                                        create_buy_operation()
+                                    else:
+                                        print("│ [تَجَاوُزٌ] مَرَّتْ سَاعَةٌ لَكِنَّ السِّعْرَ لَمْ يَصِلْ لِلْقَاعِ بَعْدُ.")
+                                elif current_price <= abs_last_buy_price:
+                                    if is_price_in_buy_zone:
+                                        print("│ [شِرَاءٌ] السِّعْرُ أَقَلُّ مِنْ آخِرِ شِرَاءٍ وَفِي قَاعِ 24 سَاعَة. جَارِي الشِّرَاءُ...")
+                                        create_buy_operation()
+                                    else:
+                                        print("│ [تَجَاوُزٌ] السِّعْرُ أَقَلُّ مِنْ آخِرِ شِرَاءٍ، لَكِنَّهُ لَيْسَ فِي القَاعِ الْمَطْلُوبِ.")
+                                else:
+                                    minutes_left = 60.0 - elapsed_since_sell
+                                    print("│ [تَجَاوُزٌ] نَنْتَظِرُ اِنْخِفَاضَهُ أَوْ مُرُورَ (%.1f) دَقِيقَة..." % minutes_left)
+                        elif can_rebuy(history, current_price):
+                            if is_price_in_buy_zone:
+                                print("│ [شِرَاءٌ] يَشْتَرِي! الشُّرُوطُ مُطَابِقَةٌ لِإِعَادَةِ الشِّرَاءِ فِي القَاعِ...")
+                                create_buy_operation()
+                            else:
+                                 print("│ [تَجَاوُزٌ] شُرُوطُ إِعَادَةِ الشِّرَاءِ تَحَقَّقَتْ، لَكِنَّ السِّعْرَ لَيْسَ فِي القَاعِ.")
+                        else:
+                            print("│ [تَجَاوُزٌ] شُرُوطُ الشِّرَاءِ التَّقْلِيدِيَّةِ لَمْ تَتَحَقَّقْ بَعْدُ.")
                 else:
                     print("│ [تَحْذِيرٌ] تَمَّ بُلُوغُ الحَدِّ الأَقْصَى لِلصَّفَقَاتِ (%d)." % MAX_OPEN_POSITIONS)
 
@@ -653,7 +630,7 @@ def main():
         except Exception as e:
             error_str = str(e)
             print("[ERROR] %s" % error_str[:200])
-            if any(k in error_str.lower() for k in ["connection", "proxy", "read", "timeout", "api"]):
+            if any(k in error_str.lower() for k in ["connection", "proxy", "read", "timeout", "api", "unauthorized"]):
                 init_client_with_retries()
 
         elapsed = time.time() - loop_start
@@ -661,8 +638,7 @@ def main():
         time.sleep(sleep_time)
 
     print("[END] تَمَّ الاِنْتِهَاءُ مِنَ الدَّوْرَةِ زَمَنِيًّا!")
-    final_balance = get_usdt_balance()
-    send_telegram_message(f"⏹️ <b>إيقاف البوت التجريبي</b>\nالرصيد النهائي: {final_balance:.2f} USDT")
 
 if __name__ == "__main__":
     main()
+
